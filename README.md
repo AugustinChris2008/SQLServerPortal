@@ -92,4 +92,3 @@ kubectl apply -k deploy/kubernetes/base
 
 Vor einem zentralen Rollout muss die Authentifizierung aktiviert werden. Die jetzige Version ist für lokale Entwicklung beziehungsweise ein bereits vollständig abgeschottetes Testnetz gedacht.
 
-
