@@ -102,7 +102,7 @@ public sealed class DemoPortalRepository : IPortalRepository
                 unit,
                 status,
                 deviation,
-                server.CollectedAtUtc));
+                server.CollectedAtUtc ?? _timeProvider.GetUtcNow()));
         }
 
         static string? ActualValue(int serverId, string key, string expectedValue)
@@ -166,7 +166,7 @@ public sealed class DemoPortalRepository : IPortalRepository
             _databases.Count,
             _databases.Count(database => database.Status == "Gesund"),
             _databases.Count(database => database.Status != "Gesund"),
-            _databases.Sum(database => database.SizeGb),
+            _databases.Sum(database => database.SizeGb) ?? 0,
             _servers.Sum(server => server.MemoryGb ?? 0));
 
         var overview = new PortalOverview(

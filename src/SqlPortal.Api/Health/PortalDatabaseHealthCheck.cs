@@ -25,7 +25,11 @@ public sealed class PortalDatabaseHealthCheck(IConfiguration configuration) : IH
         {
             await using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
-            return HealthCheckResult.Healthy("Portal database is reachable.");
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT TOP (1) 1 FROM [ZZImportTest].[dbo].[zol_ready4import];";
+            command.CommandTimeout = 5;
+            _ = await command.ExecuteScalarAsync(cancellationToken);
+            return HealthCheckResult.Healthy("Portal source table is readable.");
         }
         catch (Exception exception)
         {

@@ -77,7 +77,8 @@ export function ServersPage() {
   );
 }
 
-function snapshotAgeTone(value: string): 'recent' | 'week' | 'old' {
+function snapshotAgeTone(value: string | null): 'recent' | 'week' | 'old' | 'unknown' {
+  if (!value) return 'unknown';
   const ageInDays = (Date.now() - new Date(value).getTime()) / 86_400_000;
   if (ageInDays <= 1) return 'recent';
   if (ageInDays <= 7) return 'week';

@@ -1,0 +1,16 @@
+# Vorlage, nicht durch kustomization.yaml installiert.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sql-portal-kerberos
+data:
+  krb5.conf: |
+    [libdefaults]
+        default_realm = INTERN.ZOLLNER.DE
+        dns_lookup_realm = true
+        dns_lookup_kdc = true
+        rdns = false
+        forwardable = true
+    [domain_realm]
+        .intern.zollner.de = INTERN.ZOLLNER.DE
+        intern.zollner.de = INTERN.ZOLLNER.DE

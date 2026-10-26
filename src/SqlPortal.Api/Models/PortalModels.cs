@@ -9,7 +9,7 @@ public sealed record PortalServer(
     string Edition,
     int DatabaseCount,
     decimal? MemoryGb,
-    DateTimeOffset CollectedAtUtc);
+    DateTimeOffset? CollectedAtUtc);
 
 public sealed record PortalDatabase(
     int Id,
@@ -20,14 +20,14 @@ public sealed record PortalDatabase(
     string Status,
     string State,
     string RecoveryModel,
-    int CompatibilityLevel,
-    decimal SizeGb,
+    int? CompatibilityLevel,
+    decimal? SizeGb,
     decimal? DataUsedPercent,
     decimal? LogUsedPercent,
     DateTimeOffset? LastFullBackupAtUtc,
     DateTimeOffset? LastLogBackupAtUtc,
     string Owner,
-    DateTimeOffset CollectedAtUtc);
+    DateTimeOffset? CollectedAtUtc);
 
 public sealed record PortalOverview(
     string SourceMode,
@@ -60,10 +60,10 @@ public sealed record DatabaseAlert(
     string Name,
     string Environment,
     string Status,
-    decimal SizeGb,
+    decimal? SizeGb,
     decimal? LogUsedPercent,
     DateTimeOffset? LastFullBackupAtUtc,
-    DateTimeOffset CollectedAtUtc);
+    DateTimeOffset? CollectedAtUtc);
 
 public sealed record ConfigurationCheck(
     int Id,

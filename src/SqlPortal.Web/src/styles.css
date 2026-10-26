@@ -213,6 +213,7 @@ td small { display: block; margin-top: 3px; color: #98a1ad; font-size: 8px; }
 .snapshot-age--recent { color: #197c64; }
 .snapshot-age--week { color: #a06412; }
 .snapshot-age--old { color: #b6384a; }
+.snapshot-age--unknown { color: #7d8796; }
 .compact-meter { display: flex; align-items: center; gap: 6px; }
 .compact-meter small { margin: 0; }
 .pagination { min-height: 52px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; color: #8a94a2; font-size: 9px; border-top: 1px solid #e9edf1; background: #fbfcfd; }

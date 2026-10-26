@@ -67,8 +67,8 @@ export function DatabasesPage() {
                     <td><strong className="table-secondary">{database.serverName}</strong><small>{database.environment}</small></td>
                     <td><StatusPill status={database.status} /></td>
                     <td><span className={`state-label${database.state !== 'ONLINE' ? ' state-label--danger' : ''}`}>{database.state}</span></td>
-                    <td>{database.recoveryModel}<small>Compat {database.compatibilityLevel}</small></td>
-                    <td>{formatStorage(database.sizeGb)}</td>
+                    <td>{database.recoveryModel}<small>Compat {database.compatibilityLevel ?? '–'}</small></td>
+                    <td>{database.sizeGb === null ? '–' : formatStorage(database.sizeGb)}</td>
                     <td><Meter value={database.dataUsedPercent} /></td>
                     <td><div className="compact-meter"><Meter value={database.logUsedPercent} /><small>{formatPercent(database.logUsedPercent)}</small></div></td>
                     <td title={formatDateTime(database.lastFullBackupAtUtc)}>{relativeTime(database.lastFullBackupAtUtc)}</td>

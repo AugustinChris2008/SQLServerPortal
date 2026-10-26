@@ -10,7 +10,7 @@ public static class PortalDataRegistration
 
         if (string.Equals(mode, "SqlServer", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddScoped<IPortalRepository, SqlPortalRepository>();
+            services.AddScoped<IPortalRepository, ZolPortalRepository>();
         }
         else if (string.Equals(mode, "Demo", StringComparison.OrdinalIgnoreCase))
         {

@@ -1,6 +1,6 @@
 # SQL Operations Portal
 
-Read-only-Webportal für den zentralen Überblick über zeitversetzt erfasste Microsoft-SQL-Server- und Datenbankdaten. Das Portal ist bewusst als Snapshot-Inventar aufgebaut und behauptet weder Live-Verfügbarkeit noch aktuelle CPU-Auslastung. Das Projekt startet standardmäßig mit realistischen Demo-Daten und kann über drei stabile SQL-Views an eine bestehende Reporting-Datenbank angeschlossen werden.
+Read-only-Webportal für den zentralen Überblick über zeitversetzt erfasste Microsoft-SQL-Server- und Datenbankdaten. Das Portal ist bewusst als Snapshot-Inventar aufgebaut und behauptet weder Live-Verfügbarkeit noch aktuelle CPU-Auslastung. Im SQL-Modus liest es ausschließlich per `SELECT` aus `[ZZImportTest].[dbo].[zol_ready4import]`; im Demo-Modus bleibt die bestehende Oberfläche ohne Datenbank erreichbar.
 
 ## Enthalten
 
@@ -46,18 +46,33 @@ Das Frontend läuft dann auf `http://localhost:5173` und leitet API-Aufrufe an `
 
 ## SQL Server anschließen
 
-1. Die drei Views aus [database/README.md](database/README.md) auf die vorhandenen Tabellen abbilden.
-2. Einen Benutzer mit ausschließlich `SELECT` auf dem Schema `portal` verwenden.
-3. Die Konfiguration setzen:
+1. Für das AD-Konto `SqlPortal` ausschließlich `SELECT` auf `[dbo].[zol_ready4import]` freigeben.
+2. `.env.example` als `.env` kopieren und Server, AD-Realm sowie Dateipfade anpassen.
+3. Die Konfiguration verwendet integrierte Authentifizierung und `ApplicationIntent=ReadOnly`:
 
 ```powershell
 $env:DataSource__Mode = "SqlServer"
-$env:ConnectionStrings__PortalDatabase = "Server=tcp:SERVER,1433;Database=DB;User ID=sqlportal_reader;Password=...;Encrypt=True;TrustServerCertificate=False;ApplicationIntent=ReadOnly;Application Name=SQL Operations Portal"
+$env:ConnectionStrings__PortalDatabase = "Server=tcp:DEZANT101V.intern.zollner.de,1433;Database=ZZImportTest;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;ApplicationIntent=ReadOnly;Application Name=SQL Operations Portal"
 ```
 
-Für Docker kann `.env.example` nach `.env` kopiert und lokal angepasst werden. `.env` wird von Git ignoriert.
+Ein Linux-Container übernimmt nicht automatisch das Windows-Ticket des angemeldeten Benutzers. Für Docker wird daher eine Keytab als schreibgeschütztes Secret eingebunden:
 
-`ApplicationIntent=ReadOnly` ersetzt keine Datenbankberechtigungen. Der Login muss auf SQL-Server-Seite auf `SELECT` begrenzt werden.
+```powershell
+Copy-Item .env.example .env
+Copy-Item deploy/kerberos/krb5.conf.example C:/secure/sqlportal/krb5.conf
+# Realm, Domain- und KDC-Namen sowie die Pfade in .env anpassen.
+docker compose -f compose.yaml -f compose.kerberos.yaml up --build
+```
+
+Falls zunächst noch keine Keytab bereitsteht, unterstützt `compose.kerberos-password.yaml` alternativ eine lokale Datei, die ausschließlich das Kennwort enthält. Die Datei muss außerhalb des Repositories liegen und wird ebenfalls nur schreibgeschützt eingebunden:
+
+```powershell
+docker compose -f compose.yaml -f compose.kerberos-password.yaml up --build
+```
+
+`.env`, `krb5.conf`, `*.keytab` und `*.password` werden von Git ignoriert. Zugangsdaten gehören weder in das Image noch in Git. Für den ersten internen Verbindungstest ist in `.env.example` `TrustServerCertificate=True` gesetzt; nach Bereitstellung der Unternehmens-CA sollte dies auf `False` geändert werden.
+
+`ApplicationIntent=ReadOnly` ersetzt keine Datenbankberechtigungen. Der Login muss auf SQL-Server-Seite auf `SELECT` für die benötigte Tabelle begrenzt bleiben. Die Anwendung enthält im aktiven Repository ausschließlich feste, parametrisierte `SELECT`-Abfragen.
 
 ## API
 
@@ -76,7 +91,7 @@ Listenendpunkte akzeptieren `search`, `environment`, `page`, `pageSize`, `sortBy
 
 ## Kubernetes
 
-Die Basis liegt unter `deploy/kubernetes/base`. Vor dem Deployment müssen mindestens Image-Name, Ingress-Host, Datenquellenmodus und Secret-Verwaltung an den Zielcluster angepasst werden.
+Die Basis liegt unter `deploy/kubernetes/base`. Vor dem Deployment müssen mindestens Image-Name, Ingress-Host, Datenquellenmodus, AD-Realm und Secret-Verwaltung an den Zielcluster angepasst werden. Die optionalen Volumes `sql-portal-kerberos` erwarten `krb5.conf` aus einer ConfigMap und `sqlportal.keytab` aus einem Secret; Vorlagen liegen daneben und werden absichtlich nicht von Kustomize installiert.
 
 ```powershell
 kubectl apply -k deploy/kubernetes/base
@@ -87,7 +102,7 @@ kubectl apply -k deploy/kubernetes/base
 ## Noch bewusst offen
 
 - Unternehmens-Login über OIDC/Entra ID; dafür werden Tenant, Client-ID und DBA-Gruppe benötigt.
-- konkrete View-Zuordnung; dafür wird das vorhandene Tabellenschema benötigt.
+- fachliche Ausgestaltung der einzelnen Tabs über die heute verfügbare Inventartabelle hinaus.
 - Backup-, SQL-Agent- und Hochverfügbarkeitsmodule als nächste fachliche Ausbaustufen.
 
 Vor einem zentralen Rollout muss die Authentifizierung aktiviert werden. Die jetzige Version ist für lokale Entwicklung beziehungsweise ein bereits vollständig abgeschottetes Testnetz gedacht.

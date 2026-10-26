@@ -17,4 +17,8 @@
 .tools/
 .artifacts/
 .browser-profile/
+.secrets/
+*.keytab
+*.password
+krb5.conf
 

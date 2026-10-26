@@ -1,6 +1,21 @@
 # SQL-Vertrag des Portals
 
-Die Anwendung liest ausschließlich aus drei Views im Schema `portal`. Die vorhandenen Tabellen können beliebig aufgebaut sein; nur die View-Ausgabe muss diesen Vertrag erfüllen.
+## Aktive Datenquelle
+
+Der Modus `SqlServer` liest direkt und ausschließlich aus `[ZZImportTest].[dbo].[zol_ready4import]`. Dafür sind keine Views und keine Schreibrechte erforderlich. Die feste Zuordnung befindet sich in `ZolPortalRepository`.
+
+- Server: Gruppierung über `hardwareid`, ersatzweise `hostname` oder `sqlserverinstance`.
+- Datenbanken: `sqldb_name`, `sqldb_size`, Recovery Model, User Access, Business Contact und Full-Backup-Pfad.
+- Snapshot: Bei mehrfach vorhandenen Server-/Datenbankkombinationen wird der neueste nichtleere `scan_date` verwendet.
+- Nullwerte: werden als unbekannt beziehungsweise `NULL` weitergegeben und nicht durch erfundene Messwerte ersetzt.
+- Status: bleibt `Unbewertet`, weil die Tabelle keinen belastbaren Live- oder Health-Status enthält.
+- Konfiguration: bleibt leer, weil die Tabelle keine SOLL-/IST-Konfigurationswerte enthält.
+
+Die Readiness-Prüfung führt `SELECT TOP (1) 1` auf genau dieser Tabelle aus und prüft damit Verbindung und Leseberechtigung.
+
+## Generischer View-Vertrag (derzeit nicht aktiv)
+
+Der folgende Vertrag dokumentiert die frühere generische Repository-Variante und kann für spätere Datenquellen wiederverwendet werden. Die aktuell registrierte Implementierung verwendet diese Views nicht.
 
 Das Portal behandelt alle Werte als zeitversetzte Snapshots. Es leitet aus alten oder fehlenden Datensätzen ausdrücklich keinen Online-/Offline-Status ab. `CollectedAtUtc` muss deshalb immer den tatsächlichen Erfassungszeitpunkt enthalten.
 

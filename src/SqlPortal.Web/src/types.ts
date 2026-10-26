@@ -9,7 +9,7 @@ export interface PortalServer {
   edition: string;
   databaseCount: number;
   memoryGb: number | null;
-  collectedAtUtc: string;
+  collectedAtUtc: string | null;
 }
 
 export interface PortalDatabase {
@@ -21,14 +21,14 @@ export interface PortalDatabase {
   status: Status;
   state: string;
   recoveryModel: string;
-  compatibilityLevel: number;
-  sizeGb: number;
+  compatibilityLevel: number | null;
+  sizeGb: number | null;
   dataUsedPercent: number | null;
   logUsedPercent: number | null;
   lastFullBackupAtUtc: string | null;
   lastLogBackupAtUtc: string | null;
   owner: string;
-  collectedAtUtc: string;
+  collectedAtUtc: string | null;
 }
 
 export interface OverviewMetrics {
@@ -55,10 +55,10 @@ export interface DatabaseAlert {
   name: string;
   environment: string;
   status: Status;
-  sizeGb: number;
+  sizeGb: number | null;
   logUsedPercent: number | null;
   lastFullBackupAtUtc: string | null;
-  collectedAtUtc: string;
+  collectedAtUtc: string | null;
 }
 
 export interface PortalOverview {
