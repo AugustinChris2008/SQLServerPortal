@@ -46,31 +46,23 @@ Das Frontend läuft dann auf `http://localhost:5173` und leitet API-Aufrufe an `
 
 ## SQL Server anschließen
 
-1. Für das AD-Konto `SqlPortal` ausschließlich `SELECT` auf `[dbo].[zol_ready4import]` freigeben.
-2. `.env.example` als `.env` kopieren und Server, AD-Realm sowie Dateipfade anpassen.
-3. Die Konfiguration verwendet integrierte Authentifizierung und `ApplicationIntent=ReadOnly`:
+1. Den lokalen SQL-Login `SqlPortal` mit ausschließlich `SELECT` auf `[dbo].[zol_ready4import]` verwenden.
+2. `.env.example` als `.env` kopieren und `SQLPORTAL_PASSWORD` durch das echte Kennwort ersetzen.
+3. Die Konfiguration verwendet SQL-Authentifizierung und `ApplicationIntent=ReadOnly`:
 
 ```powershell
 $env:DataSource__Mode = "SqlServer"
-$env:ConnectionStrings__PortalDatabase = "Server=tcp:DEZANT101V.intern.zollner.de,1433;Database=ZZImportTest;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;ApplicationIntent=ReadOnly;Application Name=SQL Operations Portal"
+$env:ConnectionStrings__PortalDatabase = "Server=tcp:DEZANT101V,1433;Database=ZZImportTest;User ID=SqlPortal;Password=CHANGE_ME;Encrypt=True;TrustServerCertificate=True;ApplicationIntent=ReadOnly;Application Name=SQL Operations Portal"
 ```
 
-Ein Linux-Container übernimmt nicht automatisch das Windows-Ticket des angemeldeten Benutzers. Für Docker wird daher eine Keytab als schreibgeschütztes Secret eingebunden:
+Für Docker wird die lokale, von Git ignorierte `.env` verwendet:
 
 ```powershell
 Copy-Item .env.example .env
-Copy-Item deploy/kerberos/krb5.conf.example C:/secure/sqlportal/krb5.conf
-# Realm, Domain- und KDC-Namen sowie die Pfade in .env anpassen.
-docker compose -f compose.yaml -f compose.kerberos.yaml up --build
+docker compose up --detach --build
 ```
 
-Falls zunächst noch keine Keytab bereitsteht, unterstützt `compose.kerberos-password.yaml` alternativ eine lokale Datei, die ausschließlich das Kennwort enthält. Die Datei muss außerhalb des Repositories liegen und wird ebenfalls nur schreibgeschützt eingebunden:
-
-```powershell
-docker compose -f compose.yaml -f compose.kerberos-password.yaml up --build
-```
-
-`.env`, `krb5.conf`, `*.keytab` und `*.password` werden von Git ignoriert. Zugangsdaten gehören weder in das Image noch in Git. Für den ersten internen Verbindungstest ist in `.env.example` `TrustServerCertificate=True` gesetzt; nach Bereitstellung der Unternehmens-CA sollte dies auf `False` geändert werden.
+`.env` wird von Git ignoriert. Das Kennwort gehört weder in das Image noch in Git. Für den ersten internen Verbindungstest ist in `.env.example` `TrustServerCertificate=True` gesetzt; nach Bereitstellung der Unternehmens-CA sollte dies auf `False` geändert werden.
 
 `ApplicationIntent=ReadOnly` ersetzt keine Datenbankberechtigungen. Der Login muss auf SQL-Server-Seite auf `SELECT` für die benötigte Tabelle begrenzt bleiben. Die Anwendung enthält im aktiven Repository ausschließlich feste, parametrisierte `SELECT`-Abfragen.
 
@@ -91,7 +83,7 @@ Listenendpunkte akzeptieren `search`, `environment`, `page`, `pageSize`, `sortBy
 
 ## Kubernetes
 
-Die Basis liegt unter `deploy/kubernetes/base`. Vor dem Deployment müssen mindestens Image-Name, Ingress-Host, Datenquellenmodus, AD-Realm und Secret-Verwaltung an den Zielcluster angepasst werden. Die optionalen Volumes `sql-portal-kerberos` erwarten `krb5.conf` aus einer ConfigMap und `sqlportal.keytab` aus einem Secret; Vorlagen liegen daneben und werden absichtlich nicht von Kustomize installiert.
+Die Basis liegt unter `deploy/kubernetes/base`. Vor dem Deployment müssen mindestens Image-Name, Ingress-Host, Datenquellenmodus und Secret-Verwaltung an den Zielcluster angepasst werden. Der Connection String mit dem SQL-Kennwort muss aus einem Kubernetes Secret beziehungsweise einem zentralen Secret Store kommen.
 
 ```powershell
 kubectl apply -k deploy/kubernetes/base

@@ -7,7 +7,7 @@ RUN npm ci
 COPY src/SqlPortal.Web/ ./
 RUN npm run build
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS api-build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS api-build
 WORKDIR /source
 COPY Directory.Build.props ./
 COPY src/SqlPortal.Api/SqlPortal.Api.csproj src/SqlPortal.Api/
@@ -20,17 +20,12 @@ RUN dotnet publish src/SqlPortal.Api/SqlPortal.Api.csproj \
     --output /app/publish \
     /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
 ENV ASPNETCORE_HTTP_PORTS=8080 \
-    DOTNET_EnableDiagnostics=0 \
-    KRB5CCNAME=FILE:/tmp/krb5cc_sqlportal
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends krb5-user \
-    && rm -rf /var/lib/apt/lists/*
+    DOTNET_EnableDiagnostics=0
 EXPOSE 8080
 COPY --from=api-build /app/publish/ ./
-COPY --chmod=755 deploy/docker/docker-entrypoint.sh /app/docker-entrypoint.sh
 USER app
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+ENTRYPOINT ["dotnet", "SqlPortal.Api.dll"]
 

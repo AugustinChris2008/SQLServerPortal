@@ -9,6 +9,5 @@ services:
     environment:
       DataSource__Mode: "${SQLPORTAL_DATA_SOURCE:-Demo}"
       ConnectionStrings__PortalDatabase: "${SQLPORTAL_CONNECTION_STRING:-}"
-      SQLPORTAL_KERBEROS_PRINCIPAL: "${SQLPORTAL_KERBEROS_PRINCIPAL:-}"
     restart: unless-stopped
 

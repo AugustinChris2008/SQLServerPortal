@@ -136,20 +136,30 @@ GO
 
 Das Beispiel ist vor der Ausführung an die echten Tabellen- und Spaltennamen anzupassen. Für die Datenbank-View gilt dasselbe Prinzip.
 
-## Read-only-Rolle
+## Lokaler Read-only-SQL-Login
 
 ```sql
-IF DATABASE_PRINCIPAL_ID(N'portal_reader') IS NULL
-    CREATE ROLE portal_reader;
+USE [master];
 GO
 
-GRANT SELECT ON SCHEMA::portal TO portal_reader;
-DENY INSERT, UPDATE, DELETE, EXECUTE ON SCHEMA::portal TO portal_reader;
+IF SUSER_ID(N'SqlPortal') IS NULL
+    CREATE LOGIN [SqlPortal]
+        WITH PASSWORD = N'CHANGE_ME',
+             CHECK_POLICY = ON,
+             CHECK_EXPIRATION = ON;
 GO
 
--- Den zuvor angelegten Datenbankbenutzer der Rolle zuordnen:
--- ALTER ROLE portal_reader ADD MEMBER [DOMAIN\sqlportal-service];
+USE [ZZImportTest];
+GO
+
+IF USER_ID(N'SqlPortal') IS NULL
+    CREATE USER [SqlPortal] FOR LOGIN [SqlPortal];
+GO
+
+GRANT SELECT ON OBJECT::[dbo].[zol_ready4import] TO [SqlPortal];
+DENY INSERT, UPDATE, DELETE ON OBJECT::[dbo].[zol_ready4import] TO [SqlPortal];
+GO
 ```
 
-Die Anwendung benötigt keine Rechte auf den zugrunde liegenden Tabellen, sofern die Ownership Chain nicht unterbrochen wird.
+`CHANGE_ME` muss durch ein starkes, ausschließlich außerhalb des Repositories gespeichertes Kennwort ersetzt werden. Der Login darf keiner Server- oder Datenbankrolle mit Schreibrechten angehören. Die Anwendung benötigt keine weiteren SQL-Berechtigungen.
 

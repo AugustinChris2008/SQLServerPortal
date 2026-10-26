@@ -32,11 +32,6 @@ spec:
             - secretRef:
                 name: sql-portal-secrets
                 optional: true
-          env:
-            - name: KRB5_CONFIG
-              value: /etc/sqlportal-kerberos/krb5.conf
-            - name: SQLPORTAL_KERBEROS_KEYTAB
-              value: /run/secrets/sqlportal.keytab
           readinessProbe:
             httpGet:
               path: /health/ready
@@ -68,21 +63,7 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: kerberos-config
-              mountPath: /etc/sqlportal-kerberos
-              readOnly: true
-            - name: kerberos-keytab
-              mountPath: /run/secrets
-              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
-        - name: kerberos-config
-          configMap:
-            name: sql-portal-kerberos
-            optional: true
-        - name: kerberos-keytab
-          secret:
-            secretName: sql-portal-kerberos
-            optional: true
 
