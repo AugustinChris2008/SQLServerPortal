@@ -1,0 +1,170 @@
+export type Status = 'Warnung' | 'Gesund' | 'Kritisch' | string;
+
+export interface PortalServer {
+  id: number;
+  name: string;
+  instanceName: string;
+  environment: string;
+  version: string;
+  edition: string;
+  databaseCount: number;
+  memoryGb: number | null;
+  collectedAtUtc: string | null;
+  description: string | null;
+}
+
+export interface ServerFilterOptions {
+  environments: string[];
+  versions: string[];
+  editions: string[];
+}
+
+export interface ServerParameter {
+  name: string;
+  value: string | null;
+}
+
+export interface ServerDetail {
+  server: PortalServer;
+  parameters: ServerParameter[];
+  databases: PortalDatabase[];
+  configurationChecks: ConfigurationCheck[];
+}
+
+export interface PortalDatabase {
+  id: number;
+  serverId: number;
+  serverName: string;
+  name: string;
+  environment: string;
+  status: Status;
+  state: string;
+  recoveryModel: string;
+  compatibilityLevel: number | null;
+  sizeGb: number | null;
+  dataUsedPercent: number | null;
+  logUsedPercent: number | null;
+  lastFullBackupAtUtc: string | null;
+  lastLogBackupAtUtc: string | null;
+  owner: string;
+  collectedAtUtc: string | null;
+}
+
+export interface DatabaseDetail {
+  database: PortalDatabase;
+  parameters: ServerParameter[];
+  configurationChecks: ConfigurationCheck[];
+}
+
+export interface OverviewMetrics {
+  totalServers: number;
+  recentServers: number;
+  weekOldServers: number;
+  olderServers: number;
+  totalDatabases: number;
+  healthyDatabases: number;
+  attentionDatabases: number;
+  totalSizeGb: number;
+  totalMemoryGb: number;
+}
+
+export interface EnvironmentSummary {
+  environment: string;
+  serverCount: number;
+  databaseCount: number;
+}
+
+export interface DatabaseAlert {
+  id: number;
+  serverName: string;
+  name: string;
+  environment: string;
+  status: Status;
+  sizeGb: number | null;
+  logUsedPercent: number | null;
+  lastFullBackupAtUtc: string | null;
+  collectedAtUtc: string | null;
+}
+
+export interface PortalOverview {
+  sourceMode: 'Demo' | 'SqlServer';
+  generatedAtUtc: string;
+  oldestCollectedAtUtc: string | null;
+  metrics: OverviewMetrics;
+  environments: EnvironmentSummary[];
+  focusServers: PortalServer[];
+  databaseAlerts: DatabaseAlert[];
+}
+
+export interface ConfigurationCheck {
+  id: number;
+  serverId: number;
+  serverName: string;
+  instanceName: string | null;
+  environment: string;
+  category: string;
+  parameterName: string;
+  expectedValue: string;
+  actualValue: string | null;
+  databaseName: string | null;
+  objectName: string | null;
+  configuredValue: string | null;
+  runningValue: string | null;
+  isCompliant: boolean;
+  complianceState: string | null;
+  description: string | null;
+  unit: string | null;
+  status: 'Konform' | 'Abweichung' | 'Nicht ermittelt' | string;
+  deviation: string | null;
+  collectedAtUtc: string;
+}
+
+export interface ConfigurationMetrics {
+  totalChecks: number;
+  compliantChecks: number;
+  driftedChecks: number;
+  unknownChecks: number;
+  compliancePercent: number;
+}
+
+export interface ServerConfigurationSummary {
+  serverId: number;
+  serverName: string;
+  environment: string;
+  totalChecks: number;
+  compliantChecks: number;
+  driftedChecks: number;
+  unknownChecks: number;
+  compliancePercent: number;
+  collectedAtUtc: string;
+}
+
+export interface ConfigurationOverview {
+  sourceMode: 'Demo' | 'SqlServer';
+  generatedAtUtc: string;
+  metrics: ConfigurationMetrics;
+  categories: string[];
+  servers: ServerConfigurationSummary[];
+}
+
+export interface PagedResult<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+export interface ListQuery {
+  search?: string;
+  status?: string;
+  environment?: string;
+  category?: string;
+  version?: string;
+  edition?: string;
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+}
+
