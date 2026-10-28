@@ -9,7 +9,23 @@ public sealed record PortalServer(
     string Edition,
     int DatabaseCount,
     decimal? MemoryGb,
-    DateTimeOffset? CollectedAtUtc);
+    DateTimeOffset? CollectedAtUtc,
+    string? Description);
+
+public sealed record ServerFilterOptions(
+    IReadOnlyList<string> Environments,
+    IReadOnlyList<string> Versions,
+    IReadOnlyList<string> Editions);
+
+public sealed record ServerParameter(
+    string Name,
+    string? Value);
+
+public sealed record ServerDetail(
+    PortalServer Server,
+    IReadOnlyList<ServerParameter> Parameters,
+    IReadOnlyList<PortalDatabase> Databases,
+    IReadOnlyList<ConfigurationCheck> ConfigurationChecks);
 
 public sealed record PortalDatabase(
     int Id,
@@ -28,6 +44,11 @@ public sealed record PortalDatabase(
     DateTimeOffset? LastLogBackupAtUtc,
     string Owner,
     DateTimeOffset? CollectedAtUtc);
+
+public sealed record DatabaseDetail(
+    PortalDatabase Database,
+    IReadOnlyList<ServerParameter> Parameters,
+    IReadOnlyList<ConfigurationCheck> ConfigurationChecks);
 
 public sealed record PortalOverview(
     string SourceMode,
@@ -77,7 +98,15 @@ public sealed record ConfigurationCheck(
     string? Unit,
     string Status,
     string? Deviation,
-    DateTimeOffset CollectedAtUtc);
+    DateTimeOffset CollectedAtUtc,
+    string? InstanceName,
+    string? DatabaseName,
+    string? ObjectName,
+    string? ConfiguredValue,
+    string? RunningValue,
+    bool IsCompliant,
+    string? ComplianceState,
+    string? Description);
 
 public sealed record ConfigurationOverview(
     string SourceMode,
@@ -117,6 +146,8 @@ public sealed record PortalQuery(
     string? Search,
     string? Status,
     string? Environment,
+    string? Version,
+    string? Edition,
     int Page,
     int PageSize,
     string SortBy,
@@ -130,11 +161,15 @@ public sealed record PortalQuery(
         int pageSize,
         string? sortBy,
         string? sortDirection,
-        string defaultSort) =>
+        string defaultSort,
+        string? version = null,
+        string? edition = null) =>
         new(
             string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
             string.IsNullOrWhiteSpace(status) ? null : status.Trim(),
             string.IsNullOrWhiteSpace(environment) ? null : environment.Trim(),
+            string.IsNullOrWhiteSpace(version) ? null : version.Trim(),
+            string.IsNullOrWhiteSpace(edition) ? null : edition.Trim(),
             Math.Max(1, page),
             Math.Clamp(pageSize, 10, 100),
             string.IsNullOrWhiteSpace(sortBy) ? defaultSort : sortBy.Trim(),

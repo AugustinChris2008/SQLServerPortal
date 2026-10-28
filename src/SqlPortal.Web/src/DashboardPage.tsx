@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { portalApi } from './api';
-import { formatDateTime, formatNumber, formatPercent, formatStorage, relativeTime } from './format';
+import { formatDateTime, formatNumber, formatPercent, relativeTime } from './format';
 import type { PortalOverview } from './types';
 import { ErrorState, Icon, LoadingState, PageTitle, StatusPill } from './ui';
 
@@ -55,10 +55,9 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | '
         <span className="demo-banner__freshness"><Icon name="clock" size={15} /> Ältester Stand {relativeTime(overview.oldestCollectedAtUtc)}</span>
       </div>
 
-      <section className="metric-grid" aria-label="Kennzahlen">
+      <section className="metric-grid dashboard-metric-grid" aria-label="Kennzahlen">
         <MetricCard label="SQL Server" value={formatNumber(metrics.totalServers)} detail="erfasste Instanzen" icon="server" tone="blue" onClick={() => onNavigate('servers')} />
         <MetricCard label="Datenbanken" value={formatNumber(metrics.totalDatabases)} detail="laut letzter Erfassung" icon="database" tone="violet" onClick={() => onNavigate('databases')} />
-        <MetricCard label="Installierter RAM" value={formatStorage(metrics.totalMemoryGb)} detail="über alle Server" icon="storage" tone="amber" onClick={() => onNavigate('servers')} />
         <MetricCard label="Auffälligkeiten" value={formatNumber(metrics.attentionDatabases)} detail="im letzten Snapshot" icon="alert" tone={metrics.attentionDatabases > 0 ? 'red' : 'green'} onClick={() => onNavigate('databases')} />
       </section>
 
@@ -105,17 +104,17 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | '
       </section>
 
       <section className="panel table-panel">
-        <PanelHeader title="Älteste Server-Snapshots" subtitle="RAM-Kapazität und Datenstand" action={<button className="text-button" onClick={() => onNavigate('servers')}>Alle Server</button>} />
+        <PanelHeader title="Älteste Server-Snapshots" subtitle="Description, Klassifizierung und Datenstand" action={<button className="text-button" onClick={() => onNavigate('servers')}>Alle Server</button>} />
         <div className="table-scroll">
           <table>
-            <thead><tr><th>Server</th><th>Umgebung</th><th>Datenbanken</th><th>Installierter RAM</th><th>Datenstand</th></tr></thead>
+            <thead><tr><th>Server</th><th>Description</th><th>Umgebung</th><th>Datenbanken</th><th>Datenstand</th></tr></thead>
             <tbody>
               {overview.focusServers.map((server) => (
                 <tr key={server.id}>
                   <td><strong>{server.name}</strong><small>{server.version} · {server.edition}</small></td>
+                  <td>{server.description ?? '–'}</td>
                   <td>{server.environment}</td>
                   <td>{server.databaseCount}</td>
-                  <td>{server.memoryGb === null ? '–' : formatStorage(server.memoryGb)}</td>
                   <td className="muted" title={formatDateTime(server.collectedAtUtc)}>{relativeTime(server.collectedAtUtc)}</td>
                 </tr>
               ))}

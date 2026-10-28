@@ -1,4 +1,5 @@
 using SqlPortal.Api.Models;
+using System.Globalization;
 
 namespace SqlPortal.Api.Data;
 
@@ -16,26 +17,26 @@ public sealed class DemoPortalRepository : IPortalRepository
 
         _servers =
         [
-            new(1, "SQL-PROD-01", "SQL-PROD-01\\MSSQLSERVER", "Produktion", "SQL Server 2025", "Enterprise", 38, 128, now.AddHours(-26)),
-            new(2, "SQL-PROD-02", "SQL-PROD-02\\MSSQLSERVER", "Produktion", "SQL Server 2022", "Enterprise", 26, 128, now.AddDays(-3)),
-            new(3, "SQL-AG-DR01", "SQL-AG-DR01\\MSSQLSERVER", "Produktion", "SQL Server 2025", "Enterprise", 42, 128, now.AddDays(-6)),
-            new(4, "SQL-UAT-01", "SQL-UAT-01\\MSSQLSERVER", "Abnahme", "SQL Server 2022", "Standard", 19, 64, now.AddDays(-9)),
-            new(5, "SQL-DEV-01", "SQL-DEV-01\\DEV", "Entwicklung", "SQL Server 2022", "Developer", 31, 48, now.AddHours(-18)),
-            new(6, "SQL-LEGACY-01", "SQL-LEGACY-01\\MSSQLSERVER", "Produktion", "SQL Server 2019", "Standard", 11, 64, now.AddDays(-21))
+            new(1, "SQL-PROD-01", "SQL-PROD-01\\MSSQLSERVER", "Prod", "SQL Server 2025", "Enterprise", 38, 128, now.AddHours(-26), "ERP Primärinstanz ##Prod"),
+            new(2, "SQL-PROD-02", "SQL-PROD-02\\MSSQLSERVER", "Prod", "SQL Server 2022", "Enterprise", 26, 128, now.AddDays(-3), "Data-Warehouse ##Prod"),
+            new(3, "SQL-AG-DR01", "SQL-AG-DR01\\MSSQLSERVER", "Prod", "SQL Server 2025", "Enterprise", 42, 128, now.AddDays(-6), "Always-On-Replikat ##Prod"),
+            new(4, "SQL-UAT-01", "SQL-UAT-01\\MSSQLSERVER", "Cons", "SQL Server 2022", "Standard", 19, 64, now.AddDays(-9), "Konsolidierungsumgebung ##Cons"),
+            new(5, "SQL-DEV-01", "SQL-DEV-01\\DEV", "Test", "SQL Server 2022", "Developer", 31, 48, now.AddHours(-18), "Entwicklungs- und Testinstanz ##Test"),
+            new(6, "SQL-LEGACY-01", "SQL-LEGACY-01\\MSSQLSERVER", "Prod", "SQL Server 2019", "Standard", 11, 64, now.AddDays(-21), "Legacy-Abrechnung ##Prod")
         ];
 
         _databases =
         [
-            new(101, 1, "SQL-PROD-01", "ERP_Core", "Produktion", "Gesund", "ONLINE", "FULL", 170, 842, 73, 31, now.AddDays(-2), now.AddHours(-27), "svc_erp", now.AddHours(-26)),
-            new(102, 1, "SQL-PROD-01", "ERP_Archive", "Produktion", "Warnung", "ONLINE", "FULL", 170, 91, 88, 22, now.AddDays(-8), now.AddDays(-2), "svc_erp", now.AddHours(-26)),
-            new(103, 2, "SQL-PROD-02", "DWH_Facts", "Produktion", "Kritisch", "ONLINE", "FULL", 160, 2418, 92, 89, now.AddDays(-4), now.AddDays(-3), "svc_dwh", now.AddDays(-3)),
-            new(104, 2, "SQL-PROD-02", "DWH_Stage", "Produktion", "Warnung", "ONLINE", "SIMPLE", 160, 530, 84, 68, now.AddDays(-4), null, "svc_dwh", now.AddDays(-3)),
-            new(105, 3, "SQL-AG-DR01", "Customer360", "Produktion", "Gesund", "ONLINE", "FULL", 170, 684, 64, 17, now.AddDays(-7), now.AddDays(-6), "svc_crm", now.AddDays(-6)),
-            new(106, 3, "SQL-AG-DR01", "OrderHub", "Produktion", "Gesund", "ONLINE", "FULL", 170, 389, 58, 14, now.AddDays(-7), now.AddDays(-6), "svc_orders", now.AddDays(-6)),
-            new(107, 4, "SQL-UAT-01", "ERP_UAT", "Abnahme", "Gesund", "ONLINE", "SIMPLE", 160, 196, 52, 12, now.AddDays(-10), null, "svc_erp", now.AddDays(-9)),
-            new(108, 4, "SQL-UAT-01", "Integration_UAT", "Abnahme", "Warnung", "RECOVERY_PENDING", "FULL", 160, 48, 71, 44, now.AddDays(-10), now.AddDays(-9), "svc_integration", now.AddDays(-9)),
-            new(109, 5, "SQL-DEV-01", "DevPlayground", "Entwicklung", "Gesund", "ONLINE", "SIMPLE", 160, 72, 38, 9, now.AddDays(-3), null, "dev_team", now.AddHours(-18)),
-            new(110, 6, "SQL-LEGACY-01", "LegacyBilling", "Produktion", "Kritisch", "UNKNOWN", "FULL", 150, 218, null, null, now.AddDays(-28), now.AddDays(-28), "sa", now.AddDays(-21))
+            new(101, 1, "SQL-PROD-01", "ERP_Core", "Prod", "Gesund", "ONLINE", "FULL", 170, 842, 73, 31, now.AddDays(-2), now.AddHours(-27), "svc_erp", now.AddHours(-26)),
+            new(102, 1, "SQL-PROD-01", "ERP_Archive", "Prod", "Warnung", "ONLINE", "FULL", 170, 91, 88, 22, now.AddDays(-8), now.AddDays(-2), "svc_erp", now.AddHours(-26)),
+            new(103, 2, "SQL-PROD-02", "DWH_Facts", "Prod", "Kritisch", "ONLINE", "FULL", 160, 2418, 92, 89, now.AddDays(-4), now.AddDays(-3), "svc_dwh", now.AddDays(-3)),
+            new(104, 2, "SQL-PROD-02", "DWH_Stage", "Prod", "Warnung", "ONLINE", "SIMPLE", 160, 530, 84, 68, now.AddDays(-4), null, "svc_dwh", now.AddDays(-3)),
+            new(105, 3, "SQL-AG-DR01", "Customer360", "Prod", "Gesund", "ONLINE", "FULL", 170, 684, 64, 17, now.AddDays(-7), now.AddDays(-6), "svc_crm", now.AddDays(-6)),
+            new(106, 3, "SQL-AG-DR01", "OrderHub", "Prod", "Gesund", "ONLINE", "FULL", 170, 389, 58, 14, now.AddDays(-7), now.AddDays(-6), "svc_orders", now.AddDays(-6)),
+            new(107, 4, "SQL-UAT-01", "ERP_UAT", "Cons", "Gesund", "ONLINE", "SIMPLE", 160, 196, 52, 12, now.AddDays(-10), null, "svc_erp", now.AddDays(-9)),
+            new(108, 4, "SQL-UAT-01", "Integration_UAT", "Cons", "Warnung", "RECOVERY_PENDING", "FULL", 160, 48, 71, 44, now.AddDays(-10), now.AddDays(-9), "svc_integration", now.AddDays(-9)),
+            new(109, 5, "SQL-DEV-01", "DevPlayground", "Test", "Gesund", "ONLINE", "SIMPLE", 160, 72, 38, 9, now.AddDays(-3), null, "dev_team", now.AddHours(-18)),
+            new(110, 6, "SQL-LEGACY-01", "LegacyBilling", "Prod", "Kritisch", "UNKNOWN", "FULL", 150, 218, null, null, now.AddDays(-28), now.AddDays(-28), "sa", now.AddDays(-21))
         ];
 
         var checks = new List<ConfigurationCheck>();
@@ -102,7 +103,15 @@ public sealed class DemoPortalRepository : IPortalRepository
                 unit,
                 status,
                 deviation,
-                server.CollectedAtUtc ?? _timeProvider.GetUtcNow()));
+                server.CollectedAtUtc ?? _timeProvider.GetUtcNow(),
+                server.InstanceName,
+                null,
+                null,
+                actualValue,
+                actualValue,
+                status == "Konform",
+                status == "Konform" ? "COMPLIANT" : status == "Abweichung" ? "NON_COMPLIANT" : "UNKNOWN",
+                deviation));
         }
 
         static string? ActualValue(int serverId, string key, string expectedValue)
@@ -191,7 +200,7 @@ public sealed class DemoPortalRepository : IPortalRepository
         if (query.Search is not null)
         {
             result = result.Where(server =>
-                $"{server.Name} {server.InstanceName} {server.Version} {server.Edition}"
+                $"{server.Name} {server.InstanceName} {server.Version} {server.Edition} {server.Description}"
                     .Contains(query.Search, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -201,12 +210,28 @@ public sealed class DemoPortalRepository : IPortalRepository
                 string.Equals(server.Environment, query.Environment, StringComparison.OrdinalIgnoreCase));
         }
 
+        if (query.Version is not null)
+        {
+            result = result.Where(server =>
+                string.Equals(server.Version, query.Version, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (query.Edition is not null)
+        {
+            result = result.Where(server =>
+                string.Equals(server.Edition, query.Edition, StringComparison.OrdinalIgnoreCase));
+        }
+
         result = (query.SortBy.ToLowerInvariant(), query.SortDescending) switch
         {
             ("databasecount", false) => result.OrderBy(server => server.DatabaseCount),
             ("databasecount", true) => result.OrderByDescending(server => server.DatabaseCount),
             ("memorygb", false) => result.OrderBy(server => server.MemoryGb),
             ("memorygb", true) => result.OrderByDescending(server => server.MemoryGb),
+            ("version", false) => result.OrderBy(server => server.Version),
+            ("version", true) => result.OrderByDescending(server => server.Version),
+            ("edition", false) => result.OrderBy(server => server.Edition),
+            ("edition", true) => result.OrderByDescending(server => server.Edition),
             ("collectedatutc", false) => result.OrderBy(server => server.CollectedAtUtc),
             ("collectedatutc", true) => result.OrderByDescending(server => server.CollectedAtUtc),
             (_, true) => result.OrderByDescending(server => server.Name),
@@ -214,6 +239,45 @@ public sealed class DemoPortalRepository : IPortalRepository
         };
 
         return Task.FromResult(ToPage(result, query));
+    }
+
+    public Task<ServerFilterOptions> GetServerFilterOptionsAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new ServerFilterOptions(
+            ["Prod", "Cons", "Test"],
+            _servers.Select(server => server.Version).Distinct().Order().ToArray(),
+            _servers.Select(server => server.Edition).Distinct().Order().ToArray()));
+    }
+
+    public Task<ServerDetail?> GetServerDetailAsync(
+        int serverId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var server = _servers.SingleOrDefault(candidate => candidate.Id == serverId);
+        if (server is null)
+        {
+            return Task.FromResult<ServerDetail?>(null);
+        }
+
+        ServerParameter[] parameters =
+        [
+            new("hostname", server.Name),
+            new("sqlserverinstance", server.InstanceName),
+            new("description", server.Description),
+            new("sqlserverversion", server.Version),
+            new("sqlserverskuname", server.Edition),
+            new("classification", server.Environment),
+            new("scan_date", server.CollectedAtUtc?.ToString("O"))
+        ];
+        var detail = new ServerDetail(
+            server,
+            parameters,
+            _databases.Where(database => database.ServerId == serverId).ToArray(),
+            _configurationChecks.Where(check => check.ServerId == serverId).ToArray());
+        return Task.FromResult<ServerDetail?>(detail);
     }
 
     public Task<PagedResult<PortalDatabase>> GetDatabasesAsync(
@@ -240,6 +304,43 @@ public sealed class DemoPortalRepository : IPortalRepository
         };
 
         return Task.FromResult(ToPage(result, query));
+    }
+
+    public Task<DatabaseDetail?> GetDatabaseDetailAsync(
+        int databaseId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var database = _databases.SingleOrDefault(candidate => candidate.Id == databaseId);
+        if (database is null)
+        {
+            return Task.FromResult<DatabaseDetail?>(null);
+        }
+
+        ServerParameter[] parameters =
+        [
+            new("Id", database.Id.ToString(CultureInfo.InvariantCulture)),
+            new("ServerId", database.ServerId.ToString(CultureInfo.InvariantCulture)),
+            new("ServerName", database.ServerName),
+            new("DatabaseName", database.Name),
+            new("Environment", database.Environment),
+            new("Status", database.Status),
+            new("State", database.State),
+            new("RecoveryModel", database.RecoveryModel),
+            new("CompatibilityLevel", database.CompatibilityLevel?.ToString(CultureInfo.InvariantCulture)),
+            new("SizeGb", database.SizeGb?.ToString(CultureInfo.InvariantCulture)),
+            new("DataUsedPercent", database.DataUsedPercent?.ToString(CultureInfo.InvariantCulture)),
+            new("LogUsedPercent", database.LogUsedPercent?.ToString(CultureInfo.InvariantCulture)),
+            new("LastFullBackupAtUtc", database.LastFullBackupAtUtc?.ToString("O")),
+            new("LastLogBackupAtUtc", database.LastLogBackupAtUtc?.ToString("O")),
+            new("Owner", database.Owner),
+            new("CollectedAtUtc", database.CollectedAtUtc?.ToString("O"))
+        ];
+        var checks = _configurationChecks
+            .Where(check => check.ServerId == database.ServerId
+                && string.Equals(check.DatabaseName, database.Name, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return Task.FromResult<DatabaseDetail?>(new DatabaseDetail(database, parameters, checks));
     }
 
     public Task<ConfigurationOverview> GetConfigurationOverviewAsync(

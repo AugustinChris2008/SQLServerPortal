@@ -125,6 +125,7 @@ export function SearchInput({ value, onChange, placeholder }: { value: string; o
       <Icon name="search" size={18} />
       <span className="sr-only">Suche</span>
       <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+      {value && <button type="button" className="search-input__clear" aria-label="Suche löschen" onClick={() => onChange('')}><Icon name="close" size={14} /></button>}
     </label>
   );
 }

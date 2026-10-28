@@ -1,6 +1,7 @@
 using Dapper;
 using Microsoft.Data.SqlClient;
 using SqlPortal.Api.Models;
+using System.Globalization;
 
 namespace SqlPortal.Api.Data;
 
@@ -10,6 +11,8 @@ public sealed class SqlPortalRepository : IPortalRepository
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["name"] = "Name",
+            ["version"] = "Version",
+            ["edition"] = "Edition",
             ["databaseCount"] = "DatabaseCount",
             ["memoryGb"] = "MemoryGb",
             ["collectedAtUtc"] = "CollectedAtUtc"
@@ -80,7 +83,8 @@ public sealed class SqlPortalRepository : IPortalRepository
 
             SELECT TOP (6)
                 Id, Name, InstanceName, Environment, Version, Edition,
-                DatabaseCount, MemoryGb, CollectedAtUtc
+                DatabaseCount, MemoryGb, CollectedAtUtc,
+                Description = CAST(NULL AS nvarchar(255))
             FROM portal.vServerOverview
             ORDER BY CollectedAtUtc, Name;
 
@@ -137,11 +141,14 @@ public sealed class SqlPortalRepository : IPortalRepository
         var sql = $$"""
             SELECT
                 Id, Name, InstanceName, Environment, Version, Edition,
-                DatabaseCount, MemoryGb, CollectedAtUtc
+                DatabaseCount, MemoryGb, CollectedAtUtc,
+                Description = CAST(NULL AS nvarchar(255))
             FROM portal.vServerOverview
             WHERE (@SearchPattern IS NULL OR Name LIKE @SearchPattern OR InstanceName LIKE @SearchPattern
                 OR Version LIKE @SearchPattern OR Edition LIKE @SearchPattern)
               AND (@Environment IS NULL OR Environment = @Environment)
+              AND (@Version IS NULL OR Version = @Version)
+              AND (@Edition IS NULL OR Edition = @Edition)
             ORDER BY {{orderBy}} {{direction}}
             OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
 
@@ -149,7 +156,9 @@ public sealed class SqlPortalRepository : IPortalRepository
             FROM portal.vServerOverview
             WHERE (@SearchPattern IS NULL OR Name LIKE @SearchPattern OR InstanceName LIKE @SearchPattern
                 OR Version LIKE @SearchPattern OR Edition LIKE @SearchPattern)
-              AND (@Environment IS NULL OR Environment = @Environment);
+              AND (@Environment IS NULL OR Environment = @Environment)
+              AND (@Version IS NULL OR Version = @Version)
+              AND (@Edition IS NULL OR Edition = @Edition);
             """;
 
         var parameters = CreateParameters(query);
@@ -159,6 +168,95 @@ public sealed class SqlPortalRepository : IPortalRepository
         var items = (await grid.ReadAsync<PortalServer>()).AsList();
         var total = await grid.ReadSingleAsync<int>();
         return new PagedResult<PortalServer>(items, query.Page, query.PageSize, total);
+    }
+
+    public async Task<ServerFilterOptions> GetServerFilterOptionsAsync(
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT DISTINCT Environment
+            FROM portal.vServerOverview
+            WHERE Environment IS NOT NULL
+            ORDER BY Environment;
+
+            SELECT DISTINCT Version
+            FROM portal.vServerOverview
+            WHERE Version IS NOT NULL
+            ORDER BY Version;
+
+            SELECT DISTINCT Edition
+            FROM portal.vServerOverview
+            WHERE Edition IS NOT NULL
+            ORDER BY Edition;
+            """;
+
+        await using var connection = CreateConnection();
+        var command = new CommandDefinition(sql, cancellationToken: cancellationToken);
+        using var grid = await connection.QueryMultipleAsync(command);
+        return new ServerFilterOptions(
+            (await grid.ReadAsync<string>()).AsList(),
+            (await grid.ReadAsync<string>()).AsList(),
+            (await grid.ReadAsync<string>()).AsList());
+    }
+
+    public async Task<ServerDetail?> GetServerDetailAsync(
+        int serverId,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT
+                Id, Name, InstanceName, Environment, Version, Edition,
+                DatabaseCount, MemoryGb, CollectedAtUtc,
+                Description = CAST(NULL AS nvarchar(255))
+            FROM portal.vServerOverview
+            WHERE Id = @ServerId;
+
+            SELECT
+                Id, ServerId, ServerName, Name, Environment, Status, State, RecoveryModel,
+                CompatibilityLevel, SizeGb, DataUsedPercent, LogUsedPercent,
+                LastFullBackupAtUtc, LastLogBackupAtUtc, Owner, CollectedAtUtc
+            FROM portal.vDatabaseOverview
+            WHERE ServerId = @ServerId
+            ORDER BY Name;
+
+            SELECT
+                Id, ServerId, ServerName, Environment, Category, ParameterName,
+                ExpectedValue, ActualValue, Unit, Status, Deviation, CollectedAtUtc,
+                InstanceName = CAST(NULL AS nvarchar(255)),
+                DatabaseName = CAST(NULL AS nvarchar(255)),
+                ObjectName = CAST(NULL AS nvarchar(255)),
+                ConfiguredValue = ActualValue,
+                RunningValue = ActualValue,
+                IsCompliant = CAST(CASE WHEN Status = N'Konform' THEN 1 ELSE 0 END AS bit),
+                ComplianceState = Status,
+                Description = Deviation
+            FROM portal.vConfigurationCheck
+            WHERE ServerId = @ServerId
+            ORDER BY Category, ParameterName;
+            """;
+
+        await using var connection = CreateConnection();
+        var command = new CommandDefinition(sql, new { ServerId = serverId }, cancellationToken: cancellationToken);
+        using var grid = await connection.QueryMultipleAsync(command);
+        var server = await grid.ReadSingleOrDefaultAsync<PortalServer>();
+        var databases = (await grid.ReadAsync<PortalDatabase>()).AsList();
+        var checks = (await grid.ReadAsync<ConfigurationCheck>()).AsList();
+        if (server is null)
+        {
+            return null;
+        }
+
+        ServerParameter[] parameters =
+        [
+            new("Name", server.Name),
+            new("InstanceName", server.InstanceName),
+            new("Environment", server.Environment),
+            new("Version", server.Version),
+            new("Edition", server.Edition),
+            new("DatabaseCount", server.DatabaseCount.ToString(CultureInfo.InvariantCulture)),
+            new("CollectedAtUtc", server.CollectedAtUtc?.ToString("O"))
+        ];
+        return new ServerDetail(server, parameters, databases, checks);
     }
 
     public async Task<PagedResult<PortalDatabase>> GetDatabasesAsync(
@@ -195,6 +293,66 @@ public sealed class SqlPortalRepository : IPortalRepository
         var items = (await grid.ReadAsync<PortalDatabase>()).AsList();
         var total = await grid.ReadSingleAsync<int>();
         return new PagedResult<PortalDatabase>(items, query.Page, query.PageSize, total);
+    }
+
+    public async Task<DatabaseDetail?> GetDatabaseDetailAsync(
+        int databaseId,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT
+                Id, ServerId, ServerName, Name, Environment, Status, State, RecoveryModel,
+                CompatibilityLevel, SizeGb, DataUsedPercent, LogUsedPercent,
+                LastFullBackupAtUtc, LastLogBackupAtUtc, Owner, CollectedAtUtc
+            FROM portal.vDatabaseOverview
+            WHERE Id = @DatabaseId;
+
+            SELECT
+                Id, ServerId, ServerName, Environment, Category, ParameterName,
+                ExpectedValue, ActualValue, Unit, Status, Deviation, CollectedAtUtc,
+                InstanceName = CAST(NULL AS nvarchar(255)),
+                DatabaseName = CAST(NULL AS nvarchar(255)),
+                ObjectName = CAST(NULL AS nvarchar(255)),
+                ConfiguredValue = ActualValue,
+                RunningValue = ActualValue,
+                IsCompliant = CAST(CASE WHEN Status = N'Konform' THEN 1 ELSE 0 END AS bit),
+                ComplianceState = Status,
+                Description = Deviation
+            FROM portal.vConfigurationCheck
+            WHERE ServerId = (SELECT ServerId FROM portal.vDatabaseOverview WHERE Id = @DatabaseId)
+            ORDER BY Category, ParameterName;
+            """;
+
+        await using var connection = CreateConnection();
+        var command = new CommandDefinition(sql, new { DatabaseId = databaseId }, cancellationToken: cancellationToken);
+        using var grid = await connection.QueryMultipleAsync(command);
+        var database = await grid.ReadSingleOrDefaultAsync<PortalDatabase>();
+        var checks = (await grid.ReadAsync<ConfigurationCheck>()).AsList();
+        if (database is null)
+        {
+            return null;
+        }
+
+        ServerParameter[] parameters =
+        [
+            new("Id", database.Id.ToString(CultureInfo.InvariantCulture)),
+            new("ServerId", database.ServerId.ToString(CultureInfo.InvariantCulture)),
+            new("ServerName", database.ServerName),
+            new("Name", database.Name),
+            new("Environment", database.Environment),
+            new("Status", database.Status),
+            new("State", database.State),
+            new("RecoveryModel", database.RecoveryModel),
+            new("CompatibilityLevel", database.CompatibilityLevel?.ToString(CultureInfo.InvariantCulture)),
+            new("SizeGb", database.SizeGb?.ToString(CultureInfo.InvariantCulture)),
+            new("DataUsedPercent", database.DataUsedPercent?.ToString(CultureInfo.InvariantCulture)),
+            new("LogUsedPercent", database.LogUsedPercent?.ToString(CultureInfo.InvariantCulture)),
+            new("LastFullBackupAtUtc", database.LastFullBackupAtUtc?.ToString("O")),
+            new("LastLogBackupAtUtc", database.LastLogBackupAtUtc?.ToString("O")),
+            new("Owner", database.Owner),
+            new("CollectedAtUtc", database.CollectedAtUtc?.ToString("O"))
+        ];
+        return new DatabaseDetail(database, parameters, checks);
     }
 
     public async Task<ConfigurationOverview> GetConfigurationOverviewAsync(
@@ -260,7 +418,15 @@ public sealed class SqlPortalRepository : IPortalRepository
         var sql = $$"""
             SELECT
                 Id, ServerId, ServerName, Environment, Category, ParameterName,
-                ExpectedValue, ActualValue, Unit, Status, Deviation, CollectedAtUtc
+                ExpectedValue, ActualValue, Unit, Status, Deviation, CollectedAtUtc,
+                InstanceName = CAST(NULL AS nvarchar(255)),
+                DatabaseName = CAST(NULL AS nvarchar(255)),
+                ObjectName = CAST(NULL AS nvarchar(255)),
+                ConfiguredValue = ActualValue,
+                RunningValue = ActualValue,
+                IsCompliant = CAST(CASE WHEN Status = N'Konform' THEN 1 ELSE 0 END AS bit),
+                ComplianceState = Status,
+                Description = Deviation
             FROM portal.vConfigurationCheck
             WHERE (@SearchPattern IS NULL OR ServerName LIKE @SearchPattern
                 OR ParameterName LIKE @SearchPattern OR Category LIKE @SearchPattern
@@ -305,6 +471,8 @@ public sealed class SqlPortalRepository : IPortalRepository
         SearchPattern = query.Search is null ? null : $"%{query.Search}%",
         query.Status,
         query.Environment,
+        query.Version,
+        query.Edition,
         Offset = (query.Page - 1) * query.PageSize,
         query.PageSize
     };

@@ -10,6 +10,25 @@ export interface PortalServer {
   databaseCount: number;
   memoryGb: number | null;
   collectedAtUtc: string | null;
+  description: string | null;
+}
+
+export interface ServerFilterOptions {
+  environments: string[];
+  versions: string[];
+  editions: string[];
+}
+
+export interface ServerParameter {
+  name: string;
+  value: string | null;
+}
+
+export interface ServerDetail {
+  server: PortalServer;
+  parameters: ServerParameter[];
+  databases: PortalDatabase[];
+  configurationChecks: ConfigurationCheck[];
 }
 
 export interface PortalDatabase {
@@ -29,6 +48,12 @@ export interface PortalDatabase {
   lastLogBackupAtUtc: string | null;
   owner: string;
   collectedAtUtc: string | null;
+}
+
+export interface DatabaseDetail {
+  database: PortalDatabase;
+  parameters: ServerParameter[];
+  configurationChecks: ConfigurationCheck[];
 }
 
 export interface OverviewMetrics {
@@ -75,11 +100,19 @@ export interface ConfigurationCheck {
   id: number;
   serverId: number;
   serverName: string;
+  instanceName: string | null;
   environment: string;
   category: string;
   parameterName: string;
   expectedValue: string;
   actualValue: string | null;
+  databaseName: string | null;
+  objectName: string | null;
+  configuredValue: string | null;
+  runningValue: string | null;
+  isCompliant: boolean;
+  complianceState: string | null;
+  description: string | null;
   unit: string | null;
   status: 'Konform' | 'Abweichung' | 'Nicht ermittelt' | string;
   deviation: string | null;
@@ -127,6 +160,8 @@ export interface ListQuery {
   status?: string;
   environment?: string;
   category?: string;
+  version?: string;
+  edition?: string;
   page?: number;
   pageSize?: number;
   sortBy?: string;
