@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { portalApi } from './api';
 import { formatDateTime, formatNumber, relativeTime } from './format';
 import type { ConfigurationCheck, ConfigurationOverview, ServerConfigurationSummary } from './types';
-import { EnvironmentTag, ErrorState, Icon, LoadingState, PageTitle, StatusPill } from './ui';
+import { EnvironmentTag, ErrorState, Icon, LoadingState, PageTitle, SearchInput, StatusPill } from './ui';
 
 export function ConfigurationServerPage() {
   const [overview, setOverview] = useState<ConfigurationOverview | null>(null);
@@ -14,6 +14,9 @@ export function ConfigurationServerPage() {
   const [checksLoading, setChecksLoading] = useState(false);
   const [checksFailed, setChecksFailed] = useState(false);
   const [checksReloadKey, setChecksReloadKey] = useState(0);
+  const [serverSearch, setServerSearch] = useState('');
+  const [classification, setClassification] = useState('');
+  const [deviation, setDeviation] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -91,6 +94,25 @@ export function ConfigurationServerPage() {
     };
   }, [selectedServer]);
 
+  const classifications = useMemo(
+    () => [...new Set(overview?.servers.map((server) => server.environment) ?? [])].sort(),
+    [overview],
+  );
+
+  const filteredServers = useMemo(() => {
+    const normalizedSearch = serverSearch.trim().toLocaleLowerCase();
+    return (overview?.servers ?? []).filter((server) => {
+      const matchesSearch = normalizedSearch === ''
+        || server.serverName.toLocaleLowerCase().includes(normalizedSearch)
+        || server.environment.toLocaleLowerCase().includes(normalizedSearch);
+      const matchesClassification = classification === '' || server.environment === classification;
+      const matchesDeviation = deviation === ''
+        || (deviation === 'with' && server.driftedChecks > 0)
+        || (deviation === 'without' && server.driftedChecks === 0);
+      return matchesSearch && matchesClassification && matchesDeviation;
+    });
+  }, [overview, serverSearch, classification, deviation]);
+
   function reload() {
     setReloadKey((value) => value + 1);
   }
@@ -132,9 +154,14 @@ export function ConfigurationServerPage() {
 
       <section className="configuration-server-section">
         <article className="panel server-compliance-panel server-compliance-panel--expanded">
-          <header className="panel__header"><div><h2>Serverbewertung</h2><p>Server auswählen, um alle Parameter zu öffnen</p></div><span className="summary-count">{overview.servers.length} Server</span></header>
+          <header className="panel__header"><div><h2>Serverbewertung</h2><p>Server auswählen, um alle Parameter zu öffnen</p></div><span className="summary-count">{filteredServers.length === overview.servers.length ? `${overview.servers.length} Server` : `${filteredServers.length} von ${overview.servers.length}`}</span></header>
+          <div className="filter-bar configuration-server-filter-bar">
+            <SearchInput value={serverSearch} onChange={setServerSearch} placeholder="Server oder Klassifizierung suchen …" />
+            <label className="select-field"><span>Klassifizierung</span><select value={classification} onChange={(event) => setClassification(event.target.value)}><option value="">Alle Klassifizierungen</option>{classifications.map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label className="select-field"><span>Bewertung</span><select value={deviation} onChange={(event) => setDeviation(event.target.value)}><option value="">Alle Bewertungen</option><option value="with">Abweichung</option><option value="without">Keine Abweichung</option></select></label>
+          </div>
           <div className="server-compliance-list server-compliance-list--expanded">
-            {overview.servers.map((server) => {
+            {filteredServers.map((server) => {
               const status = serverStatus(server);
               return (
                 <button key={server.serverId} className="server-compliance-row server-compliance-row--expanded" aria-haspopup="dialog" onClick={() => setSelectedServer(server)}>
@@ -155,6 +182,7 @@ export function ConfigurationServerPage() {
                 </button>
               );
             })}
+            {filteredServers.length === 0 && <div className="empty-table configuration-server-empty"><Icon name="search" size={24} /><strong>Keine Server gefunden</strong><span>Ändere die Suche oder die Filter.</span></div>}
           </div>
         </article>
       </section>
