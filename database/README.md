@@ -12,7 +12,7 @@ Der Modus `SqlServer` liest direkt aus `[ZZImportTest].[dbo].[zol_ready4import]`
 - Snapshot: Bei mehrfach vorhandenen Server-/Datenbankkombinationen wird der neueste nichtleere `scan_date` verwendet.
 - Nullwerte: werden als unbekannt beziehungsweise `NULL` weitergegeben und nicht durch erfundene Messwerte ersetzt.
 - Status: bleibt `Unbewertet`, weil die Tabelle keinen belastbaren Live- oder Health-Status enthält.
-- Konfiguration: Der SOLL-Wert und die Beschreibung kommen vorrangig aus `ComplianceRules`; `ComplianceResults` liefert Server, Instanz, Scope, IST-/Configured-/Running-Werte und den Bewertungsstatus.
+- Konfiguration: Der SOLL-Wert und die Beschreibung kommen vorrangig aus `ComplianceRules`; `ComplianceResults` liefert Server, Instanz, Scope, IST-/Configured-/Running-Werte und den Bewertungsstatus. `CollectedAt` bezeichnet die Erfassung des IST-Werts, `EvaluatedAt` die spätere Bewertung. Es werden sowohl konforme als auch abweichende Ergebnisse gespeichert.
 - Konfigurations-Snapshot: Je Kombination aus Server, Instanz, Datenbank, Objekt und Check wird nur der neueste Datensatz nach `EvaluatedAt` angezeigt.
 - Bewertung: `COMPLIANT` wird als `Konform`, `NON_COMPLIANT` als `Abweichung` und nicht auswertbare Zustände als `Nicht ermittelt` angezeigt.
 

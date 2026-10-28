@@ -142,8 +142,15 @@ BEGIN
         IsCompliant     BIT           NOT NULL,
         ComplianceState NVARCHAR(50)  NOT NULL,
         [Description]   NVARCHAR(255) NULL,
+        CollectedAt     DATETIME2(0)  NULL,
         EvaluatedAt     DATETIME2(0)  NOT NULL
     );
+END;
+
+IF COL_LENGTH(N'$ResultsTable', N'CollectedAt') IS NULL
+BEGIN
+    ALTER TABLE $ResultsTable
+        ADD CollectedAt DATETIME2(0) NULL;
 END;
 "@
 
@@ -182,7 +189,7 @@ BEGIN TRY
 
     BEGIN TRANSACTION;
 
-    -- Bei jedem Lauf alle bisherigen Konflikte entfernen
+    -- Bei jedem Lauf alle bisherigen Bewertungen entfernen
     TRUNCATE TABLE $ResultsTable;
 
 
@@ -203,6 +210,7 @@ BEGIN TRY
 
             C.ConfiguredValue,
             C.RunningValue,
+            C.CollectedAt,
 
             CASE
                 WHEN NULLIF(LTRIM(RTRIM(C.RunningValue)), N'') IS NOT NULL
@@ -253,6 +261,7 @@ BEGIN TRY
 
             ConfiguredValue,
             RunningValue,
+            CollectedAt,
 
             [Description],
 
@@ -391,7 +400,7 @@ BEGIN TRY
     )
 
 
-    -- Nur aktuelle Konflikte und fehlende Werte speichern
+    -- Alle aktuellen Bewertungen speichern, damit die Webapp auch konforme Werte kennt
     INSERT INTO $ResultsTable
     (
         SqlServer,
@@ -408,6 +417,7 @@ BEGIN TRY
         IsCompliant,
         ComplianceState,
         [Description],
+        CollectedAt,
         EvaluatedAt
     )
     SELECT
@@ -425,9 +435,9 @@ BEGIN TRY
         IsCompliant,
         ComplianceState,
         [Description],
+        CollectedAt,
         @EvaluatedAt
-    FROM EvaluatedData
-    WHERE IsCompliant = 0;
+    FROM EvaluatedData;
 
 
     COMMIT TRANSACTION;
@@ -456,7 +466,7 @@ try {
     Invoke-DbaQuery @ComplianceParameters
 
     Write-Host "Soll-Ist-Vergleich wurde durchgeführt." -ForegroundColor Green
-    Write-Host "In der Ergebnistabelle wurden nur aktuelle Konflikte und fehlende Werte gespeichert." -ForegroundColor Green
+    Write-Host "In der Ergebnistabelle wurden alle aktuellen Bewertungen gespeichert." -ForegroundColor Green
 }
 catch {
     Write-Host "FEHLER beim Soll-Ist-Vergleich:" -ForegroundColor Red
@@ -528,8 +538,10 @@ SELECT
     RunningValue,
     ComplianceState,
     [Description],
+    CollectedAt,
     EvaluatedAt
 FROM $ResultsTable
+WHERE IsCompliant = 0
 ORDER BY
     SqlServer,
     SqlInstance,
