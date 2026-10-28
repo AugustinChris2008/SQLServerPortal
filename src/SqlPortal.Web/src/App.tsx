@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DashboardPage } from './DashboardPage';
-import { ConfigurationPage } from './ConfigurationPage';
+import { ConfigurationServerPage } from './ConfigurationServerPage';
 import { DatabaseInventoryPage } from './DatabaseInventoryPage';
 import { ServerInventoryPage } from './ServerInventoryPage';
 import { Icon } from './ui';
@@ -65,7 +65,7 @@ export function App() {
           {view === 'dashboard' && <DashboardPage onNavigate={navigate} />}
           {view === 'servers' && <ServerInventoryPage />}
           {view === 'databases' && <DatabaseInventoryPage />}
-          {view === 'configuration' && <ConfigurationPage />}
+          {view === 'configuration' && <ConfigurationServerPage />}
         </main>
         <footer className="page-footer"><span>SQL Operations Portal</span><span>Snapshot-Daten · Keine Liveüberwachung · Nur-Lese-Zugriff</span></footer>
       </div>
