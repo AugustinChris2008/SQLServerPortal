@@ -26,10 +26,25 @@ public sealed class PortalDatabaseHealthCheck(IConfiguration configuration) : IH
             await using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT TOP (1) 1 FROM [ZZImportTest].[dbo].[zol_ready4import];";
+            command.CommandText = """
+                SELECT TOP (1) Probe
+                FROM
+                (
+                    SELECT TOP (0) Probe = CAST(1 AS int)
+                    FROM [ZZImportTest].[dbo].[zol_ready4import]
+                    UNION ALL
+                    SELECT TOP (0) CAST(1 AS int)
+                    FROM [Backupparameter].[dbo].[ComplianceRules]
+                    UNION ALL
+                    SELECT TOP (0) CAST(1 AS int)
+                    FROM [Backupparameter].[dbo].[ComplianceResults]
+                    UNION ALL
+                    SELECT CAST(1 AS int)
+                ) AS readableSources;
+                """;
             command.CommandTimeout = 5;
             _ = await command.ExecuteScalarAsync(cancellationToken);
-            return HealthCheckResult.Healthy("Portal source table is readable.");
+            return HealthCheckResult.Healthy("Portal source tables are readable.");
         }
         catch (Exception exception)
         {

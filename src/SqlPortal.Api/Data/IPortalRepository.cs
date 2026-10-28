@@ -10,8 +10,19 @@ public interface IPortalRepository
         PortalQuery query,
         CancellationToken cancellationToken);
 
+    Task<ServerFilterOptions> GetServerFilterOptionsAsync(
+        CancellationToken cancellationToken);
+
+    Task<ServerDetail?> GetServerDetailAsync(
+        int serverId,
+        CancellationToken cancellationToken);
+
     Task<PagedResult<PortalDatabase>> GetDatabasesAsync(
         PortalQuery query,
+        CancellationToken cancellationToken);
+
+    Task<DatabaseDetail?> GetDatabaseDetailAsync(
+        int databaseId,
         CancellationToken cancellationToken);
 
     Task<ConfigurationOverview> GetConfigurationOverviewAsync(

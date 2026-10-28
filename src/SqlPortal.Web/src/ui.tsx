@@ -62,6 +62,18 @@ export function StatusPill({ status }: { status: string }) {
   return <span className={`status-pill status-pill--${tone}`}><span />{status}</span>;
 }
 
+export function EnvironmentTag({ value }: { value: string }) {
+  const normalized = value.trim().toLowerCase();
+  const tone = normalized === 'prod'
+    ? 'prod'
+    : normalized === 'cons'
+      ? 'cons'
+      : normalized === 'dev' || normalized === 'test'
+        ? 'dev'
+        : 'neutral';
+  return <span className={`environment-tag environment-tag--${tone}`}>{value}</span>;
+}
+
 export function Meter({ value, tone = 'default' }: { value: number | null; tone?: 'default' | 'warning' | 'danger' }) {
   if (value === null) return <span className="muted">Nicht verfügbar</span>;
   const effectiveTone = value >= 90 ? 'danger' : value >= 75 ? 'warning' : tone;
@@ -125,6 +137,7 @@ export function SearchInput({ value, onChange, placeholder }: { value: string; o
       <Icon name="search" size={18} />
       <span className="sr-only">Suche</span>
       <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+      {value && <button type="button" className="search-input__clear" aria-label="Suche löschen" onClick={() => onChange('')}><Icon name="close" size={14} /></button>}
     </label>
   );
 }

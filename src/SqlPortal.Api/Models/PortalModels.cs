@@ -10,7 +10,7 @@ public sealed record PortalServer(
     int DatabaseCount,
     decimal? MemoryGb,
     DateTimeOffset? CollectedAtUtc,
-    string? Description = null);
+    string? Description);
 
 public sealed record ServerFilterOptions(
     IReadOnlyList<string> Environments,
@@ -99,14 +99,14 @@ public sealed record ConfigurationCheck(
     string Status,
     string? Deviation,
     DateTimeOffset CollectedAtUtc,
-    string? InstanceName = null,
-    string? DatabaseName = null,
-    string? ObjectName = null,
-    string? ConfiguredValue = null,
-    string? RunningValue = null,
-    bool IsCompliant = false,
-    string? ComplianceState = null,
-    string? Description = null);
+    string? InstanceName,
+    string? DatabaseName,
+    string? ObjectName,
+    string? ConfiguredValue,
+    string? RunningValue,
+    bool IsCompliant,
+    string? ComplianceState,
+    string? Description);
 
 public sealed record ConfigurationOverview(
     string SourceMode,
@@ -146,12 +146,12 @@ public sealed record PortalQuery(
     string? Search,
     string? Status,
     string? Environment,
+    string? Version,
+    string? Edition,
     int Page,
     int PageSize,
     string SortBy,
-    bool SortDescending,
-    string? Version = null,
-    string? Edition = null)
+    bool SortDescending)
 {
     public static PortalQuery Create(
         string? search,
@@ -161,11 +161,15 @@ public sealed record PortalQuery(
         int pageSize,
         string? sortBy,
         string? sortDirection,
-        string defaultSort) =>
+        string defaultSort,
+        string? version = null,
+        string? edition = null) =>
         new(
             string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
             string.IsNullOrWhiteSpace(status) ? null : status.Trim(),
             string.IsNullOrWhiteSpace(environment) ? null : environment.Trim(),
+            string.IsNullOrWhiteSpace(version) ? null : version.Trim(),
+            string.IsNullOrWhiteSpace(edition) ? null : edition.Trim(),
             Math.Max(1, page),
             Math.Clamp(pageSize, 10, 100),
             string.IsNullOrWhiteSpace(sortBy) ? defaultSort : sortBy.Trim(),

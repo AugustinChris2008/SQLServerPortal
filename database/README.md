@@ -2,16 +2,21 @@
 
 ## Aktive Datenquelle
 
-Der Modus `SqlServer` liest direkt und ausschließlich aus `[ZZImportTest].[dbo].[zol_ready4import]`. Dafür sind keine Views und keine Schreibrechte erforderlich. Die feste Zuordnung befindet sich in `ZolPortalRepository`.
+Der Modus `SqlServer` liest direkt aus `[ZZImportTest].[dbo].[zol_ready4import]`, `[Backupparameter].[dbo].[ComplianceRules]` und `[Backupparameter].[dbo].[ComplianceResults]`. Dafür sind keine Views und keine Schreibrechte erforderlich. Die feste Zuordnung befindet sich in `ZolPortalRepository`.
 
 - Server: Gruppierung über `hardwareid`, ersatzweise `hostname` oder `sqlserverinstance`.
+- Umgebung: Die Klassifizierung zwischen dem ersten und zweiten `#` in `description` wird auf `DEV`, `PROD` oder `CONS` normalisiert, beispielsweise `100088#DEV#Zollner SQL Cluster Node 2`.
+- Serverdetails: Der Detailendpunkt gibt sämtliche Spalten der neuesten passenden `zol_ready4import`-Zeile sowie Datenbanken und Compliance-Prüfungen zurück.
+- Datenbankdetails: Der Detailendpunkt gibt sämtliche Spalten der neuesten passenden `zol_ready4import`-Zeile und datenbankspezifische Compliance-Prüfungen zurück.
 - Datenbanken: `sqldb_name`, `sqldb_size`, Recovery Model, User Access, Business Contact und Full-Backup-Pfad.
 - Snapshot: Bei mehrfach vorhandenen Server-/Datenbankkombinationen wird der neueste nichtleere `scan_date` verwendet.
 - Nullwerte: werden als unbekannt beziehungsweise `NULL` weitergegeben und nicht durch erfundene Messwerte ersetzt.
 - Status: bleibt `Unbewertet`, weil die Tabelle keinen belastbaren Live- oder Health-Status enthält.
-- Konfiguration: bleibt leer, weil die Tabelle keine SOLL-/IST-Konfigurationswerte enthält.
+- Konfiguration: Der SOLL-Wert und die Beschreibung kommen vorrangig aus `ComplianceRules`; `ComplianceResults` liefert Server, Instanz, Scope, IST-/Configured-/Running-Werte und den Bewertungsstatus.
+- Konfigurations-Snapshot: Je Kombination aus Server, Instanz, Datenbank, Objekt und Check wird nur der neueste Datensatz nach `EvaluatedAt` angezeigt.
+- Bewertung: `COMPLIANT` wird als `Konform`, `NON_COMPLIANT` als `Abweichung` und nicht auswertbare Zustände als `Nicht ermittelt` angezeigt.
 
-Die Readiness-Prüfung führt `SELECT TOP (1) 1` auf genau dieser Tabelle aus und prüft damit Verbindung und Leseberechtigung.
+Die Readiness-Prüfung referenziert alle drei Tabellen und prüft damit Verbindung, Existenz und Leseberechtigung.
 
 ## Generischer View-Vertrag (derzeit nicht aktiv)
 

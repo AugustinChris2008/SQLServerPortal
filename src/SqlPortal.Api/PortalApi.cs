@@ -18,9 +18,21 @@ public static class PortalApi
             .WithName("GetServers")
             .WithSummary("Returns a filtered and paged server list.");
 
+        api.MapGet("/servers/filters", GetServerFilterOptions)
+            .WithName("GetServerFilterOptions")
+            .WithSummary("Returns available SQL Server filters.");
+
+        api.MapGet("/servers/{serverId:int}", GetServerDetail)
+            .WithName("GetServerDetail")
+            .WithSummary("Returns inventory and compliance details for one SQL Server.");
+
         api.MapGet("/databases", GetDatabases)
             .WithName("GetDatabases")
             .WithSummary("Returns a filtered and paged database list.");
+
+        api.MapGet("/databases/{databaseId:int}", GetDatabaseDetail)
+            .WithName("GetDatabaseDetail")
+            .WithSummary("Returns all captured information for one database.");
 
         api.MapGet("/configuration/overview", GetConfigurationOverview)
             .WithName("GetConfigurationOverview")
@@ -41,6 +53,8 @@ public static class PortalApi
     private static async Task<IResult> GetServers(
         string? search,
         string? environment,
+        string? version,
+        string? edition,
         int? page,
         int? pageSize,
         string? sortBy,
@@ -56,8 +70,24 @@ public static class PortalApi
             pageSize ?? 20,
             sortBy,
             sortDirection,
-            "name");
+            "name",
+            version,
+            edition);
         return Results.Ok(await repository.GetServersAsync(query, cancellationToken));
+    }
+
+    private static async Task<IResult> GetServerFilterOptions(
+        IPortalRepository repository,
+        CancellationToken cancellationToken) =>
+        Results.Ok(await repository.GetServerFilterOptionsAsync(cancellationToken));
+
+    private static async Task<IResult> GetServerDetail(
+        int serverId,
+        IPortalRepository repository,
+        CancellationToken cancellationToken)
+    {
+        var detail = await repository.GetServerDetailAsync(serverId, cancellationToken);
+        return detail is null ? Results.NotFound() : Results.Ok(detail);
     }
 
     private static async Task<IResult> GetDatabases(
@@ -81,6 +111,15 @@ public static class PortalApi
             sortDirection,
             "name");
         return Results.Ok(await repository.GetDatabasesAsync(query, cancellationToken));
+    }
+
+    private static async Task<IResult> GetDatabaseDetail(
+        int databaseId,
+        IPortalRepository repository,
+        CancellationToken cancellationToken)
+    {
+        var detail = await repository.GetDatabaseDetailAsync(databaseId, cancellationToken);
+        return detail is null ? Results.NotFound() : Results.Ok(detail);
     }
 
     private static async Task<IResult> GetConfigurationOverview(

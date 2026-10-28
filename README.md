@@ -1,6 +1,6 @@
 # SQL Operations Portal
 
-Read-only-Webportal für den zentralen Überblick über zeitversetzt erfasste Microsoft-SQL-Server- und Datenbankdaten. Das Portal ist bewusst als Snapshot-Inventar aufgebaut und behauptet weder Live-Verfügbarkeit noch aktuelle CPU-Auslastung. Im SQL-Modus liest es ausschließlich per `SELECT` aus `[ZZImportTest].[dbo].[zol_ready4import]`; im Demo-Modus bleibt die bestehende Oberfläche ohne Datenbank erreichbar.
+Read-only-Webportal für den zentralen Überblick über zeitversetzt erfasste Microsoft-SQL-Server- und Datenbankdaten. Das Portal ist bewusst als Snapshot-Inventar aufgebaut und behauptet weder Live-Verfügbarkeit noch aktuelle CPU-Auslastung. Im SQL-Modus liest es per `SELECT` aus `[ZZImportTest].[dbo].[zol_ready4import]` sowie für die Konfigurationsprüfung aus `[Backupparameter].[dbo].[ComplianceRules]` und `[Backupparameter].[dbo].[ComplianceResults]`; im Demo-Modus bleibt die bestehende Oberfläche ohne Datenbank erreichbar.
 
 ## Enthalten
 
@@ -46,7 +46,7 @@ Das Frontend läuft dann auf `http://localhost:5173` und leitet API-Aufrufe an `
 
 ## SQL Server anschließen
 
-1. Den lokalen SQL-Login `SqlPortal` mit ausschließlich `SELECT` auf `[dbo].[zol_ready4import]` verwenden.
+1. Den lokalen SQL-Login `SqlPortal` mit ausschließlich `SELECT` auf `[ZZImportTest].[dbo].[zol_ready4import]`, `[Backupparameter].[dbo].[ComplianceRules]` und `[Backupparameter].[dbo].[ComplianceResults]` verwenden.
 2. `.env.example` als `.env` kopieren und `SQLPORTAL_PASSWORD` durch das echte Kennwort ersetzen.
 3. Die Konfiguration verwendet SQL-Authentifizierung und `ApplicationIntent=ReadOnly`:
 
@@ -64,7 +64,7 @@ docker compose up --detach --build
 
 `.env` wird von Git ignoriert. Das Kennwort gehört weder in das Image noch in Git. Für den ersten internen Verbindungstest ist in `.env.example` `TrustServerCertificate=True` gesetzt; nach Bereitstellung der Unternehmens-CA sollte dies auf `False` geändert werden.
 
-`ApplicationIntent=ReadOnly` ersetzt keine Datenbankberechtigungen. Der Login muss auf SQL-Server-Seite auf `SELECT` für die benötigte Tabelle begrenzt bleiben. Die Anwendung enthält im aktiven Repository ausschließlich feste, parametrisierte `SELECT`-Abfragen.
+`ApplicationIntent=ReadOnly` ersetzt keine Datenbankberechtigungen. Der Login muss auf SQL-Server-Seite auf `SELECT` für die drei benötigten Tabellen begrenzt bleiben. Die Anwendung enthält im aktiven Repository ausschließlich feste, parametrisierte `SELECT`-Abfragen.
 
 ## API
 
@@ -72,14 +72,17 @@ docker compose up --detach --build
 | --- | --- |
 | `GET /api/v1/overview` | aggregierte Dashboard-Daten |
 | `GET /api/v1/servers` | Server mit Suche, Filtern, Sortierung und Paging |
+| `GET /api/v1/servers/filters` | verfügbare SQL-Versionen und Editionen |
+| `GET /api/v1/servers/{serverId}` | Serverparameter, Datenbanken und Konfigurationsprüfungen |
 | `GET /api/v1/databases` | Datenbanken mit Suche, Filtern, Sortierung und Paging |
+| `GET /api/v1/databases/{databaseId}` | sämtliche erfassten Parameter und Compliance-Daten einer Datenbank |
 | `GET /api/v1/configuration/overview` | Compliance-Kennzahlen und Bewertung je Server |
 | `GET /api/v1/configuration/checks` | SOLL-/IST-Prüfungen mit Suche, Filtern, Sortierung und Paging |
 | `GET /health/live` | Prozess-Liveness |
 | `GET /health/ready` | Readiness inklusive SQL-Verbindung im SQL-Modus |
 | `GET /openapi/v1.json` | OpenAPI-Beschreibung in der Development-Umgebung |
 
-Listenendpunkte akzeptieren `search`, `environment`, `page`, `pageSize`, `sortBy` und `sortDirection`. Datenbank- und Konfigurationsendpunkt unterstützen zusätzlich `status`, der Konfigurationsendpunkt außerdem `category`.
+Listenendpunkte akzeptieren `search`, `environment`, `page`, `pageSize`, `sortBy` und `sortDirection`. Der Serverendpunkt unterstützt zusätzlich `version` und `edition`. Datenbank- und Konfigurationsendpunkt unterstützen außerdem `status`; beim Konfigurationsendpunkt filtert `category` den Servertyp.
 
 ## Kubernetes
 

@@ -3,10 +3,18 @@ export function formatNumber(value: number, maximumFractionDigits = 0): string {
 }
 
 export function formatStorage(gigabytes: number): string {
+  const formatValue = (value: number) => new Intl.NumberFormat('de-DE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+
   if (gigabytes >= 1024) {
-    return `${formatNumber(gigabytes / 1024, 1)} TB`;
+    return `${formatValue(gigabytes / 1024)} TB`;
   }
-  return `${formatNumber(gigabytes, 1)} GB`;
+  if (gigabytes >= 1) {
+    return `${formatValue(gigabytes)} GB`;
+  }
+  return `${formatValue(gigabytes * 1024)} MB`;
 }
 
 export function formatPercent(value: number | null): string {
