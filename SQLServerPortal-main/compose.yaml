@@ -1,0 +1,13 @@
+services:
+  sql-portal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sql-portal:local
+    ports:
+      - "8080:8080"
+    environment:
+      DataSource__Mode: "${SQLPORTAL_DATA_SOURCE:-Demo}"
+      ConnectionStrings__PortalDatabase: "${SQLPORTAL_CONNECTION_STRING:-}"
+    restart: unless-stopped
+
