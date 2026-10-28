@@ -16,7 +16,7 @@ export function ConfigurationServerPage() {
   const [checksReloadKey, setChecksReloadKey] = useState(0);
   const [serverSearch, setServerSearch] = useState('');
   const [classification, setClassification] = useState('');
-  const [deviation, setDeviation] = useState('');
+  const [evaluation, setEvaluation] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -106,12 +106,19 @@ export function ConfigurationServerPage() {
         || server.serverName.toLocaleLowerCase().includes(normalizedSearch)
         || server.environment.toLocaleLowerCase().includes(normalizedSearch);
       const matchesClassification = classification === '' || server.environment === classification;
-      const matchesDeviation = deviation === ''
-        || (deviation === 'with' && server.driftedChecks > 0)
-        || (deviation === 'without' && server.driftedChecks === 0);
-      return matchesSearch && matchesClassification && matchesDeviation;
+      const matchesEvaluation = evaluation === '' || serverStatus(server) === evaluation;
+      return matchesSearch && matchesClassification && matchesEvaluation;
     });
-  }, [overview, serverSearch, classification, deviation]);
+  }, [overview, serverSearch, classification, evaluation]);
+
+  const serverMetrics = useMemo(() => {
+    const servers = overview?.servers ?? [];
+    return {
+      compliant: servers.filter((server) => server.driftedChecks === 0 && server.unknownChecks === 0).length,
+      drifted: servers.filter((server) => server.driftedChecks > 0).length,
+      unknown: servers.filter((server) => server.driftedChecks === 0 && server.unknownChecks > 0).length,
+    };
+  }, [overview]);
 
   function reload() {
     setReloadKey((value) => value + 1);
@@ -146,10 +153,10 @@ export function ConfigurationServerPage() {
 
       <section className="metric-grid configuration-metric-grid" aria-label="Konfigurationskennzahlen">
         <ConfigurationMetric label="Gesamterfüllung" value={`${formatNumber(metrics.compliancePercent, 1)} %`} detail="Anteil konformer Prüfungen" icon="check" tone={metrics.compliancePercent === 100 ? 'green' : 'blue'} />
-        <ConfigurationMetric label="Prüfungen" value={formatNumber(metrics.totalChecks)} detail="über alle Server" icon="settings" tone="blue" />
-        <ConfigurationMetric label="Konform" value={formatNumber(metrics.compliantChecks)} detail="erfüllte Prüfungen" icon="check" tone="green" />
-        <ConfigurationMetric label="Abweichungen" value={formatNumber(metrics.driftedChecks)} detail="SOLL und IST prüfen" icon="alert" tone={metrics.driftedChecks > 0 ? 'red' : 'green'} />
-        <ConfigurationMetric label="Nicht ermittelt" value={formatNumber(metrics.unknownChecks)} detail="IST-Wert fehlt" icon="clock" tone={metrics.unknownChecks > 0 ? 'amber' : 'green'} />
+        <ConfigurationMetric label="Prüfungen" value={formatNumber(metrics.definedChecks)} detail="unterschiedliche Prüfungen" icon="settings" tone="blue" />
+        <ConfigurationMetric label="Konform" value={formatNumber(serverMetrics.compliant)} detail="konforme Server" icon="check" tone="green" />
+        <ConfigurationMetric label="Abweichung" value={formatNumber(serverMetrics.drifted)} detail="Server mit Abweichung" icon="alert" tone={serverMetrics.drifted > 0 ? 'red' : 'green'} />
+        <ConfigurationMetric label="Nicht ermittelt" value={formatNumber(serverMetrics.unknown)} detail="nicht ermittelte Server" icon="clock" tone={serverMetrics.unknown > 0 ? 'amber' : 'green'} />
       </section>
 
       <section className="configuration-server-section">
@@ -158,7 +165,7 @@ export function ConfigurationServerPage() {
           <div className="filter-bar configuration-server-filter-bar">
             <SearchInput value={serverSearch} onChange={setServerSearch} placeholder="Server oder Klassifizierung suchen …" />
             <label className="select-field"><span>Klassifizierung</span><select value={classification} onChange={(event) => setClassification(event.target.value)}><option value="">Alle Klassifizierungen</option>{classifications.map((value) => <option key={value}>{value}</option>)}</select></label>
-            <label className="select-field"><span>Bewertung</span><select value={deviation} onChange={(event) => setDeviation(event.target.value)}><option value="">Alle Bewertungen</option><option value="with">Abweichung</option><option value="without">Keine Abweichung</option></select></label>
+            <label className="select-field"><span>Bewertung</span><select value={evaluation} onChange={(event) => setEvaluation(event.target.value)}><option value="">Alle Bewertungen</option><option value="Abweichung">Abweichung</option><option value="Konform">Konform</option><option value="Nicht ermittelt">Nicht ermittelt</option></select></label>
           </div>
           <div className="server-compliance-list server-compliance-list--expanded">
             {filteredServers.map((server) => {
@@ -178,7 +185,7 @@ export function ConfigurationServerPage() {
                     <span>{formatNumber(server.unknownChecks)} offen</span>
                     <span>{formatNumber(server.compliantChecks)} konform</span>
                   </div>
-                  <div className="server-compliance-action"><StatusPill status={status} /><small>Details öffnen</small></div>
+                  <div className="server-compliance-action"><StatusPill status={status} /></div>
                 </button>
               );
             })}

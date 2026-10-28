@@ -121,6 +121,7 @@ export interface ConfigurationCheck {
 
 export interface ConfigurationMetrics {
   totalChecks: number;
+  definedChecks: number;
   compliantChecks: number;
   driftedChecks: number;
   unknownChecks: number;

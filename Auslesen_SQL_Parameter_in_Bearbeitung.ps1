@@ -605,14 +605,14 @@ SELECT
 
     Write-Section "OLA-BACKUPJOBS"
 
-    try {
-        $RequiredOlaJobs = [ordered]@{
-            OlaSystemDatabasesFull = "DatabaseBackup - SYSTEM_DATABASES - FULL"
-            OlaUserDatabasesFull   = "DatabaseBackup - USER_DATABASES - FULL"
-            OlaUserDatabasesDiff   = "DatabaseBackup - USER_DATABASES - DIFF"
-            OlaUserDatabasesLog    = "DatabaseBackup - USER_DATABASES - LOG"
-        }
+    $RequiredOlaJobs = [ordered]@{
+        OlaSystemDatabasesFull = "DatabaseBackup - SYSTEM_DATABASES - FULL"
+        OlaUserDatabasesFull   = "DatabaseBackup - USER_DATABASES - FULL"
+        OlaUserDatabasesDiff   = "DatabaseBackup - USER_DATABASES - DIFF"
+        OlaUserDatabasesLog    = "DatabaseBackup - USER_DATABASES - LOG"
+    }
 
+    try {
         $ExistingAgentJobs = @(
             Get-DbaAgentJob `
                 -SqlInstance $TargetInstance `
@@ -672,6 +672,138 @@ SELECT
     }
     catch {
         Write-Host "FEHLER beim Pruefen der OLA-Backupjobs auf $TargetInstance" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+    }
+
+
+    # =============================================================================================
+    # BLOCK 06 - OLA-BACKUPPARAMETER AUS DEN SQL-AGENT-JOBSTEPS AUSLESEN
+    #
+    # Die CheckNames setzen sich aus dem OLA-Job-Praefix und dem Parameternamen zusammen.
+    # Beispiel: OlaUserDatabasesFullCompress
+    # =============================================================================================
+
+    Write-Section "OLA-BACKUPPARAMETER"
+
+    $OlaBackupParameterNames = @(
+        "Databases"
+        "Directory"
+        "BackupType"
+        "Verify"
+        "Compress"
+        "CleanupTime"
+        "CheckSum"
+        "LogToTable"
+    )
+
+    $OlaBackupJobStepQuery = @"
+SELECT
+    J.name          AS JobName,
+    S.step_id       AS StepId,
+    S.step_name     AS StepName,
+    S.database_name AS ExecutionDatabase,
+    S.command       AS Command
+FROM msdb.dbo.sysjobs AS J
+INNER JOIN msdb.dbo.sysjobsteps AS S
+    ON S.job_id = J.job_id
+WHERE S.subsystem = N'TSQL'
+  AND S.command LIKE N'%DatabaseBackup%'
+ORDER BY
+    J.name,
+    S.step_id;
+"@
+
+    try {
+        $OlaBackupJobSteps = @(
+            Invoke-DbaQuery `
+                -SqlInstance $TargetInstance `
+                -Database "msdb" `
+                -Query $OlaBackupJobStepQuery `
+                -QueryTimeout 60 `
+                -As PSObject `
+                -EnableException
+        )
+
+        foreach ($OlaBackupJob in $RequiredOlaJobs.GetEnumerator()) {
+
+            $CheckPrefix = [string]$OlaBackupJob.Key
+            $JobName     = [string]$OlaBackupJob.Value
+
+            $OlaBackupJobStep = $OlaBackupJobSteps |
+                Where-Object {
+                    ([string]$_.JobName).Trim() -eq $JobName -and
+                    ([string]$_.Command) -match '(?i)(?:EXEC(?:UTE)?\s+)?(?:\[?dbo\]?\.)?\[?DatabaseBackup\]?'
+                } |
+                Sort-Object StepId |
+                Select-Object -First 1
+
+            if ($null -eq $OlaBackupJobStep) {
+                Write-Host "WARNUNG: Kein DatabaseBackup-Jobstep gefunden: $JobName" -ForegroundColor Yellow
+                continue
+            }
+
+            $JobStepCommand = [string]$OlaBackupJobStep.Command
+            $StepName       = ([string]$OlaBackupJobStep.StepName).Trim()
+            $ObjectName     = "$JobName / $StepName"
+
+            if ($ObjectName.Length -gt 255) {
+                $ObjectName = $ObjectName.Substring(0, 255)
+            }
+
+            $ExtractedParameterCount = 0
+
+            foreach ($ParameterName in $OlaBackupParameterNames) {
+
+                $EscapedParameterName = [Regex]::Escape($ParameterName)
+                $ParameterPattern = "(?is)(?<![A-Za-z0-9_])@$EscapedParameterName\s*=\s*(?<Value>N?'(?:''|[^'])*'|[^,\r\n;]+)"
+                $ParameterMatch = [Regex]::Match($JobStepCommand, $ParameterPattern)
+
+                if (-not $ParameterMatch.Success) {
+                    continue
+                }
+
+                $RawValue = $ParameterMatch.Groups["Value"].Value.Trim()
+                $StringLiteralMatch = [Regex]::Match(
+                    $RawValue,
+                    "^(?:N)?'(?<Text>(?:''|[^'])*)'$",
+                    [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+                )
+
+                if ($StringLiteralMatch.Success) {
+                    $ConfiguredValue = $StringLiteralMatch.Groups["Text"].Value.Replace("''", "'")
+                }
+                elseif ($RawValue -match '(?i)^NULL$') {
+                    $ConfiguredValue = $null
+                }
+                else {
+                    $ConfiguredValue = $RawValue
+                }
+
+                $CollectedValues += [PSCustomObject]@{
+                    SqlServer       = $SqlServerName
+                    SqlInstance     = $StoredInstanceName
+                    DatabaseName    = $null
+                    ObjectName      = $ObjectName
+                    CheckName       = "${CheckPrefix}${ParameterName}"
+                    ConfiguredValue = $ConfiguredValue
+                    RunningValue    = $null
+                    CollectedAt     = $RunTimestamp
+                }
+
+                $ExtractedParameterCount++
+                Write-Host "  $ParameterName = $ConfiguredValue"
+            }
+
+            if ($ExtractedParameterCount -eq 0) {
+                Write-Host "WARNUNG: Keine OLA-Parameter aus $JobName ausgelesen." -ForegroundColor Yellow
+            }
+            else {
+                Write-Host "$ExtractedParameterCount OLA-Parameter aus $JobName ausgelesen." -ForegroundColor Green
+            }
+        }
+    }
+    catch {
+        Write-Host "FEHLER beim Auslesen der OLA-Backupparameter auf $TargetInstance" -ForegroundColor Red
         Write-Host $_.Exception.Message -ForegroundColor Red
     }
 

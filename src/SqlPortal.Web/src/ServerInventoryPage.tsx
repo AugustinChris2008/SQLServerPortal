@@ -272,15 +272,16 @@ function ServerConfigurationState({
     : summary.unknownChecks > 0
       ? 'Nicht ermittelt'
       : 'Konform';
-  const affectedChecks = summary.driftedChecks > 0 ? summary.driftedChecks : summary.unknownChecks;
-  const detail = status === 'Konform'
-    ? `${formatNumber(summary.totalChecks)} Prüfungen`
-    : `${formatNumber(affectedChecks)} von ${formatNumber(summary.totalChecks)}`;
+  const detail = status === 'Abweichung'
+    ? `${formatNumber(summary.driftedChecks)} nicht konform`
+    : status === 'Nicht ermittelt'
+      ? `${formatNumber(summary.unknownChecks)} nicht ermittelt`
+      : `${formatNumber(summary.totalChecks)} konform`;
 
   return (
     <div
       className="server-configuration-state"
-      title={`${detail} Konfigurationsprüfungen: ${status}`}
+      title={`${detail} · ${formatNumber(summary.totalChecks)} Konfigurationsprüfungen insgesamt`}
     >
       <StatusPill status={status} />
       <small>{detail}</small>

@@ -234,12 +234,15 @@ td small { display: block; margin-top: 3px; color: #98a1ad; font-size: 9px; }
 
 .server-filter-bar { flex-wrap: wrap; }
 .server-filter-bar .search-input { min-width: 230px; }
-.server-table { min-width: 1390px !important; }
+.server-table { min-width: 1120px !important; }
+.server-table th, .server-table td { padding-right: 10px; padding-left: 10px; }
+.server-table th:first-child, .server-table td:first-child { padding-left: 14px; }
+.server-table th:last-child, .server-table td:last-child { padding-right: 14px; }
 .server-row { cursor: pointer; }
 .server-row:hover td { background: #f7fbfa; }
 .server-row:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
-.server-description { max-width: 300px; overflow: hidden; color: #596579; text-overflow: ellipsis; white-space: nowrap; }
-.server-configuration-state { min-width: 112px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.server-description { max-width: 230px; overflow: hidden; color: #596579; text-overflow: ellipsis; white-space: nowrap; }
+.server-configuration-state { min-width: 98px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .server-configuration-state small { margin-top: 0; color: #7d8999; }
 .database-filter-bar { flex-wrap: wrap; }
 .database-filter-bar .search-input { min-width: 260px; }

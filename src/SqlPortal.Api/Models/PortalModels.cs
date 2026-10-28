@@ -117,6 +117,7 @@ public sealed record ConfigurationOverview(
 
 public sealed record ConfigurationMetrics(
     int TotalChecks,
+    int DefinedChecks,
     int CompliantChecks,
     int DriftedChecks,
     int UnknownChecks,

@@ -361,6 +361,7 @@ public sealed class SqlPortalRepository : IPortalRepository
         const string sql = """
             SELECT
                 TotalChecks = COUNT(1),
+                DefinedChecks = COUNT(DISTINCT ParameterName),
                 CompliantChecks = COALESCE(SUM(CASE WHEN Status = N'Konform' THEN 1 ELSE 0 END), 0),
                 DriftedChecks = COALESCE(SUM(CASE WHEN Status = N'Abweichung' THEN 1 ELSE 0 END), 0),
                 UnknownChecks = COALESCE(SUM(CASE WHEN Status = N'Nicht ermittelt' THEN 1 ELSE 0 END), 0)
@@ -400,6 +401,7 @@ public sealed class SqlPortalRepository : IPortalRepository
             _timeProvider.GetUtcNow(),
             new ConfigurationMetrics(
                 row.TotalChecks,
+                row.DefinedChecks,
                 row.CompliantChecks,
                 row.DriftedChecks,
                 row.UnknownChecks,
@@ -511,6 +513,7 @@ public sealed class SqlPortalRepository : IPortalRepository
     private sealed class ConfigurationMetricsRow
     {
         public int TotalChecks { get; init; }
+        public int DefinedChecks { get; init; }
         public int CompliantChecks { get; init; }
         public int DriftedChecks { get; init; }
         public int UnknownChecks { get; init; }

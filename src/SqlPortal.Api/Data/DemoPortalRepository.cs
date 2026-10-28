@@ -351,11 +351,16 @@ public sealed class DemoPortalRepository : IPortalRepository
         cancellationToken.ThrowIfCancellationRequested();
 
         var total = _configurationChecks.Count;
+        var defined = _configurationChecks
+            .Select(check => check.ParameterName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
         var compliant = _configurationChecks.Count(check => check.Status == "Konform");
         var drifted = _configurationChecks.Count(check => check.Status == "Abweichung");
         var unknown = _configurationChecks.Count(check => check.Status == "Nicht ermittelt");
         var metrics = new ConfigurationMetrics(
             total,
+            defined,
             compliant,
             drifted,
             unknown,
