@@ -9,7 +9,23 @@ public sealed record PortalServer(
     string Edition,
     int DatabaseCount,
     decimal? MemoryGb,
-    DateTimeOffset? CollectedAtUtc);
+    DateTimeOffset? CollectedAtUtc,
+    string? Description = null);
+
+public sealed record ServerFilterOptions(
+    IReadOnlyList<string> Environments,
+    IReadOnlyList<string> Versions,
+    IReadOnlyList<string> Editions);
+
+public sealed record ServerParameter(
+    string Name,
+    string? Value);
+
+public sealed record ServerDetail(
+    PortalServer Server,
+    IReadOnlyList<ServerParameter> Parameters,
+    IReadOnlyList<PortalDatabase> Databases,
+    IReadOnlyList<ConfigurationCheck> ConfigurationChecks);
 
 public sealed record PortalDatabase(
     int Id,
@@ -28,6 +44,11 @@ public sealed record PortalDatabase(
     DateTimeOffset? LastLogBackupAtUtc,
     string Owner,
     DateTimeOffset? CollectedAtUtc);
+
+public sealed record DatabaseDetail(
+    PortalDatabase Database,
+    IReadOnlyList<ServerParameter> Parameters,
+    IReadOnlyList<ConfigurationCheck> ConfigurationChecks);
 
 public sealed record PortalOverview(
     string SourceMode,
@@ -77,7 +98,15 @@ public sealed record ConfigurationCheck(
     string? Unit,
     string Status,
     string? Deviation,
-    DateTimeOffset CollectedAtUtc);
+    DateTimeOffset CollectedAtUtc,
+    string? InstanceName = null,
+    string? DatabaseName = null,
+    string? ObjectName = null,
+    string? ConfiguredValue = null,
+    string? RunningValue = null,
+    bool IsCompliant = false,
+    string? ComplianceState = null,
+    string? Description = null);
 
 public sealed record ConfigurationOverview(
     string SourceMode,
@@ -120,7 +149,9 @@ public sealed record PortalQuery(
     int Page,
     int PageSize,
     string SortBy,
-    bool SortDescending)
+    bool SortDescending,
+    string? Version = null,
+    string? Edition = null)
 {
     public static PortalQuery Create(
         string? search,

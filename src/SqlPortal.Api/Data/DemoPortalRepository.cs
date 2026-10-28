@@ -16,26 +16,26 @@ public sealed class DemoPortalRepository : IPortalRepository
 
         _servers =
         [
-            new(1, "SQL-PROD-01", "SQL-PROD-01\\MSSQLSERVER", "Produktion", "SQL Server 2025", "Enterprise", 38, 128, now.AddHours(-26)),
-            new(2, "SQL-PROD-02", "SQL-PROD-02\\MSSQLSERVER", "Produktion", "SQL Server 2022", "Enterprise", 26, 128, now.AddDays(-3)),
-            new(3, "SQL-AG-DR01", "SQL-AG-DR01\\MSSQLSERVER", "Produktion", "SQL Server 2025", "Enterprise", 42, 128, now.AddDays(-6)),
-            new(4, "SQL-UAT-01", "SQL-UAT-01\\MSSQLSERVER", "Abnahme", "SQL Server 2022", "Standard", 19, 64, now.AddDays(-9)),
-            new(5, "SQL-DEV-01", "SQL-DEV-01\\DEV", "Entwicklung", "SQL Server 2022", "Developer", 31, 48, now.AddHours(-18)),
-            new(6, "SQL-LEGACY-01", "SQL-LEGACY-01\\MSSQLSERVER", "Produktion", "SQL Server 2019", "Standard", 11, 64, now.AddDays(-21))
+            new(1, "SQL-PROD-01", "SQL-PROD-01\\MSSQLSERVER", "PROD", "SQL Server 2025", "Enterprise", 38, 128, now.AddHours(-26)),
+            new(2, "SQL-PROD-02", "SQL-PROD-02\\MSSQLSERVER", "PROD", "SQL Server 2022", "Enterprise", 26, 128, now.AddDays(-3)),
+            new(3, "SQL-AG-DR01", "SQL-AG-DR01\\MSSQLSERVER", "PROD", "SQL Server 2025", "Enterprise", 42, 128, now.AddDays(-6)),
+            new(4, "SQL-UAT-01", "SQL-UAT-01\\MSSQLSERVER", "TEST", "SQL Server 2022", "Standard", 19, 64, now.AddDays(-9)),
+            new(5, "SQL-DEV-01", "SQL-DEV-01\\DEV", "DEV", "SQL Server 2022", "Developer", 31, 48, now.AddHours(-18)),
+            new(6, "SQL-LEGACY-01", "SQL-LEGACY-01\\MSSQLSERVER", "PROD", "SQL Server 2019", "Standard", 11, 64, now.AddDays(-21))
         ];
 
         _databases =
         [
-            new(101, 1, "SQL-PROD-01", "ERP_Core", "Produktion", "Gesund", "ONLINE", "FULL", 170, 842, 73, 31, now.AddDays(-2), now.AddHours(-27), "svc_erp", now.AddHours(-26)),
-            new(102, 1, "SQL-PROD-01", "ERP_Archive", "Produktion", "Warnung", "ONLINE", "FULL", 170, 91, 88, 22, now.AddDays(-8), now.AddDays(-2), "svc_erp", now.AddHours(-26)),
-            new(103, 2, "SQL-PROD-02", "DWH_Facts", "Produktion", "Kritisch", "ONLINE", "FULL", 160, 2418, 92, 89, now.AddDays(-4), now.AddDays(-3), "svc_dwh", now.AddDays(-3)),
-            new(104, 2, "SQL-PROD-02", "DWH_Stage", "Produktion", "Warnung", "ONLINE", "SIMPLE", 160, 530, 84, 68, now.AddDays(-4), null, "svc_dwh", now.AddDays(-3)),
-            new(105, 3, "SQL-AG-DR01", "Customer360", "Produktion", "Gesund", "ONLINE", "FULL", 170, 684, 64, 17, now.AddDays(-7), now.AddDays(-6), "svc_crm", now.AddDays(-6)),
-            new(106, 3, "SQL-AG-DR01", "OrderHub", "Produktion", "Gesund", "ONLINE", "FULL", 170, 389, 58, 14, now.AddDays(-7), now.AddDays(-6), "svc_orders", now.AddDays(-6)),
-            new(107, 4, "SQL-UAT-01", "ERP_UAT", "Abnahme", "Gesund", "ONLINE", "SIMPLE", 160, 196, 52, 12, now.AddDays(-10), null, "svc_erp", now.AddDays(-9)),
-            new(108, 4, "SQL-UAT-01", "Integration_UAT", "Abnahme", "Warnung", "RECOVERY_PENDING", "FULL", 160, 48, 71, 44, now.AddDays(-10), now.AddDays(-9), "svc_integration", now.AddDays(-9)),
-            new(109, 5, "SQL-DEV-01", "DevPlayground", "Entwicklung", "Gesund", "ONLINE", "SIMPLE", 160, 72, 38, 9, now.AddDays(-3), null, "dev_team", now.AddHours(-18)),
-            new(110, 6, "SQL-LEGACY-01", "LegacyBilling", "Produktion", "Kritisch", "UNKNOWN", "FULL", 150, 218, null, null, now.AddDays(-28), now.AddDays(-28), "sa", now.AddDays(-21))
+            new(101, 1, "SQL-PROD-01", "ERP_Core", "PROD", "Gesund", "ONLINE", "FULL", 170, 842, 73, 31, now.AddDays(-2), now.AddHours(-27), "svc_erp", now.AddHours(-26)),
+            new(102, 1, "SQL-PROD-01", "ERP_Archive", "PROD", "Warnung", "ONLINE", "FULL", 170, 91, 88, 22, now.AddDays(-8), now.AddDays(-2), "svc_erp", now.AddHours(-26)),
+            new(103, 2, "SQL-PROD-02", "DWH_Facts", "PROD", "Kritisch", "ONLINE", "FULL", 160, 2418, 92, 89, now.AddDays(-4), now.AddDays(-3), "svc_dwh", now.AddDays(-3)),
+            new(104, 2, "SQL-PROD-02", "DWH_Stage", "PROD", "Warnung", "ONLINE", "SIMPLE", 160, 530, 84, 68, now.AddDays(-4), null, "svc_dwh", now.AddDays(-3)),
+            new(105, 3, "SQL-AG-DR01", "Customer360", "PROD", "Gesund", "ONLINE", "FULL", 170, 684, 64, 17, now.AddDays(-7), now.AddDays(-6), "svc_crm", now.AddDays(-6)),
+            new(106, 3, "SQL-AG-DR01", "OrderHub", "PROD", "Gesund", "ONLINE", "FULL", 170, 389, 58, 14, now.AddDays(-7), now.AddDays(-6), "svc_orders", now.AddDays(-6)),
+            new(107, 4, "SQL-UAT-01", "ERP_UAT", "TEST", "Gesund", "ONLINE", "SIMPLE", 160, 196, 52, 12, now.AddDays(-10), null, "svc_erp", now.AddDays(-9)),
+            new(108, 4, "SQL-UAT-01", "Integration_UAT", "TEST", "Warnung", "RECOVERY_PENDING", "FULL", 160, 48, 71, 44, now.AddDays(-10), now.AddDays(-9), "svc_integration", now.AddDays(-9)),
+            new(109, 5, "SQL-DEV-01", "DevPlayground", "DEV", "Gesund", "ONLINE", "SIMPLE", 160, 72, 38, 9, now.AddDays(-3), null, "dev_team", now.AddHours(-18)),
+            new(110, 6, "SQL-LEGACY-01", "LegacyBilling", "PROD", "Kritisch", "UNKNOWN", "FULL", 150, 218, null, null, now.AddDays(-28), now.AddDays(-28), "sa", now.AddDays(-21))
         ];
 
         var checks = new List<ConfigurationCheck>();

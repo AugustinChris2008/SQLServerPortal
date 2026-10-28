@@ -74,6 +74,7 @@ public sealed class ZolPortalRepository : IPortalRepository
                     WHEN UPPER(COALESCE(source.Classification, '')) = 'PROD' THEN N'PROD'
                     WHEN UPPER(COALESCE(source.Classification, '')) = 'CONS' THEN N'CONS'
                     WHEN UPPER(COALESCE(source.Classification, '')) = 'DEV' THEN N'DEV'
+                    WHEN UPPER(COALESCE(source.Classification, '')) = 'TEST' THEN N'TEST'
                     ELSE N'Nicht klassifiziert'
                 END,
                 NormalizedVersion = CASE
@@ -491,7 +492,7 @@ public sealed class ZolPortalRepository : IPortalRepository
         var command = new CommandDefinition(sql, cancellationToken: cancellationToken);
         using var grid = await connection.QueryMultipleAsync(command);
         return new ServerFilterOptions(
-            ["PROD", "CONS", "DEV"],
+            ["PROD", "CONS", "DEV", "TEST"],
             (await grid.ReadAsync<string>()).AsList(),
             (await grid.ReadAsync<string>()).AsList());
     }

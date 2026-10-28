@@ -43,7 +43,7 @@ export function DatabasesPage() {
         <div className="filter-bar">
           <SearchInput value={search} onChange={updateSearch} placeholder="Datenbank, Server oder Owner suchen …" />
           <label className="select-field"><span>Status</span><select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">Alle Status</option><option>Gesund</option><option>Warnung</option><option>Kritisch</option></select></label>
-          <label className="select-field"><span>Umgebung</span><select value={environment} onChange={(event) => { setEnvironment(event.target.value); setPage(1); }}><option value="">Alle Umgebungen</option><option>Produktion</option><option>Abnahme</option><option>Entwicklung</option></select></label>
+          <label className="select-field"><span>Umgebung</span><select value={environment} onChange={(event) => { setEnvironment(event.target.value); setPage(1); }}><option value="">Alle Umgebungen</option><option>PROD</option><option>CONS</option><option>DEV</option><option>TEST</option></select></label>
           <button className="icon-button" aria-label="Aktualisieren" onClick={() => setReloadKey((value) => value + 1)}><Icon name="refresh" size={18} /></button>
         </div>
 
