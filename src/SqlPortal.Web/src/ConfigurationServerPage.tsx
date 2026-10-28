@@ -153,7 +153,7 @@ export function ConfigurationServerPage() {
 
       <section className="metric-grid configuration-metric-grid" aria-label="Konfigurationskennzahlen">
         <ConfigurationMetric label="Gesamterfüllung" value={`${formatNumber(metrics.compliancePercent, 1)} %`} detail="Anteil konformer Prüfungen" icon="check" tone={metrics.compliancePercent === 100 ? 'green' : 'blue'} />
-        <ConfigurationMetric label="Prüfungen" value={formatNumber(metrics.definedChecks)} detail="unterschiedliche Prüfungen" icon="settings" tone="blue" />
+        <ConfigurationMetric label="Prüfungen" value={formatNumber(metrics.definedChecks)} detail="definierte Regeln" icon="settings" tone="blue" />
         <ConfigurationMetric label="Konform" value={formatNumber(serverMetrics.compliant)} detail="konforme Server" icon="check" tone="green" />
         <ConfigurationMetric label="Abweichung" value={formatNumber(serverMetrics.drifted)} detail="Server mit Abweichung" icon="alert" tone={serverMetrics.drifted > 0 ? 'red' : 'green'} />
         <ConfigurationMetric label="Nicht ermittelt" value={formatNumber(serverMetrics.unknown)} detail="nicht ermittelte Server" icon="clock" tone={serverMetrics.unknown > 0 ? 'amber' : 'green'} />
