@@ -681,6 +681,7 @@ SELECT
     #
     # Die CheckNames setzen sich aus dem OLA-Job-Praefix und dem Parameternamen zusammen.
     # Beispiel: OlaUserDatabasesFullCompress
+    # Fehlende, leere oder explizit auf NULL gesetzte Parameter werden als NOT_SET gespeichert.
     # =============================================================================================
 
     Write-Section "OLA-BACKUPPARAMETER"
@@ -751,32 +752,38 @@ ORDER BY
             }
 
             $ExtractedParameterCount = 0
+            $MissingParameterCount   = 0
 
             foreach ($ParameterName in $OlaBackupParameterNames) {
 
                 $EscapedParameterName = [Regex]::Escape($ParameterName)
                 $ParameterPattern = "(?is)(?<![A-Za-z0-9_])@$EscapedParameterName\s*=\s*(?<Value>N?'(?:''|[^'])*'|[^,\r\n;]+)"
                 $ParameterMatch = [Regex]::Match($JobStepCommand, $ParameterPattern)
+                $ParameterIsSet = $ParameterMatch.Success
+                $ConfiguredValue = "NOT_SET"
 
-                if (-not $ParameterMatch.Success) {
-                    continue
-                }
+                if ($ParameterMatch.Success) {
+                    $RawValue = $ParameterMatch.Groups["Value"].Value.Trim()
+                    $StringLiteralMatch = [Regex]::Match(
+                        $RawValue,
+                        "^(?:N)?'(?<Text>(?:''|[^'])*)'$",
+                        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+                    )
 
-                $RawValue = $ParameterMatch.Groups["Value"].Value.Trim()
-                $StringLiteralMatch = [Regex]::Match(
-                    $RawValue,
-                    "^(?:N)?'(?<Text>(?:''|[^'])*)'$",
-                    [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
-                )
+                    if ($StringLiteralMatch.Success) {
+                        $ConfiguredValue = $StringLiteralMatch.Groups["Text"].Value.Replace("''", "'")
+                    }
+                    elseif ($RawValue -match '(?i)^NULL$') {
+                        $ParameterIsSet = $false
+                    }
+                    else {
+                        $ConfiguredValue = $RawValue
+                    }
 
-                if ($StringLiteralMatch.Success) {
-                    $ConfiguredValue = $StringLiteralMatch.Groups["Text"].Value.Replace("''", "'")
-                }
-                elseif ($RawValue -match '(?i)^NULL$') {
-                    $ConfiguredValue = $null
-                }
-                else {
-                    $ConfiguredValue = $RawValue
+                    if ([string]::IsNullOrWhiteSpace([string]$ConfiguredValue)) {
+                        $ParameterIsSet  = $false
+                        $ConfiguredValue = "NOT_SET"
+                    }
                 }
 
                 $CollectedValues += [PSCustomObject]@{
@@ -790,15 +797,20 @@ ORDER BY
                     CollectedAt     = $RunTimestamp
                 }
 
-                $ExtractedParameterCount++
-                Write-Host "  $ParameterName = $ConfiguredValue"
+                if ($ParameterIsSet) {
+                    $ExtractedParameterCount++
+                    Write-Host "  $ParameterName = $ConfiguredValue"
+                }
+                else {
+                    $MissingParameterCount++
+                    Write-Host "  $ParameterName = NOT_SET" -ForegroundColor Yellow
+                }
             }
 
-            if ($ExtractedParameterCount -eq 0) {
-                Write-Host "WARNUNG: Keine OLA-Parameter aus $JobName ausgelesen." -ForegroundColor Yellow
-            }
-            else {
-                Write-Host "$ExtractedParameterCount OLA-Parameter aus $JobName ausgelesen." -ForegroundColor Green
+            Write-Host "$ExtractedParameterCount OLA-Parameter aus $JobName ausgelesen." -ForegroundColor Green
+
+            if ($MissingParameterCount -gt 0) {
+                Write-Host "$MissingParameterCount OLA-Parameter sind nicht gesetzt und wurden als NOT_SET gespeichert." -ForegroundColor Yellow
             }
         }
     }
