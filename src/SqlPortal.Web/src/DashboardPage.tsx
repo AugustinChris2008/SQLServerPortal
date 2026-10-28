@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { portalApi } from './api';
 import { formatDateTime, formatNumber, formatPercent, relativeTime } from './format';
 import type { PortalOverview } from './types';
-import { ErrorState, Icon, LoadingState, PageTitle, StatusPill } from './ui';
+import { EnvironmentTag, ErrorState, Icon, LoadingState, PageTitle, StatusPill } from './ui';
 
 export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | 'databases') => void }) {
   const [overview, setOverview] = useState<PortalOverview | null>(null);
@@ -113,7 +113,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | '
                 <tr key={server.id}>
                   <td><strong>{server.name}</strong><small>{server.version} · {server.edition}</small></td>
                   <td>{server.description ?? '–'}</td>
-                  <td>{server.environment}</td>
+                  <td><EnvironmentTag value={server.environment} /></td>
                   <td>{server.databaseCount}</td>
                   <td className="muted" title={formatDateTime(server.collectedAtUtc)}>{relativeTime(server.collectedAtUtc)}</td>
                 </tr>

@@ -62,6 +62,18 @@ export function StatusPill({ status }: { status: string }) {
   return <span className={`status-pill status-pill--${tone}`}><span />{status}</span>;
 }
 
+export function EnvironmentTag({ value }: { value: string }) {
+  const normalized = value.trim().toLowerCase();
+  const tone = normalized === 'prod'
+    ? 'prod'
+    : normalized === 'cons'
+      ? 'cons'
+      : normalized === 'dev' || normalized === 'test'
+        ? 'dev'
+        : 'neutral';
+  return <span className={`environment-tag environment-tag--${tone}`}>{value}</span>;
+}
+
 export function Meter({ value, tone = 'default' }: { value: number | null; tone?: 'default' | 'warning' | 'danger' }) {
   if (value === null) return <span className="muted">Nicht verfügbar</span>;
   const effectiveTone = value >= 90 ? 'danger' : value >= 75 ? 'warning' : tone;

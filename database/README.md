@@ -5,7 +5,7 @@
 Der Modus `SqlServer` liest direkt aus `[ZZImportTest].[dbo].[zol_ready4import]`, `[Backupparameter].[dbo].[ComplianceRules]` und `[Backupparameter].[dbo].[ComplianceResults]`. Dafür sind keine Views und keine Schreibrechte erforderlich. Die feste Zuordnung befindet sich in `ZolPortalRepository`.
 
 - Server: Gruppierung über `hardwareid`, ersatzweise `hostname` oder `sqlserverinstance`.
-- Umgebung: Die Klassifizierung hinter `##` in `description` wird auf `Prod`, `Cons` oder `Test` normalisiert.
+- Umgebung: Die Klassifizierung zwischen dem ersten und zweiten `#` in `description` wird auf `DEV`, `PROD` oder `CONS` normalisiert, beispielsweise `100088#DEV#Zollner SQL Cluster Node 2`.
 - Serverdetails: Der Detailendpunkt gibt sämtliche Spalten der neuesten passenden `zol_ready4import`-Zeile sowie Datenbanken und Compliance-Prüfungen zurück.
 - Datenbankdetails: Der Detailendpunkt gibt sämtliche Spalten der neuesten passenden `zol_ready4import`-Zeile und datenbankspezifische Compliance-Prüfungen zurück.
 - Datenbanken: `sqldb_name`, `sqldb_size`, Recovery Model, User Access, Business Contact und Full-Backup-Pfad.

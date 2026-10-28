@@ -3,9 +3,9 @@ import { portalApi } from './api';
 import { formatDateTime, formatNumber, formatStorage, relativeTime } from './format';
 import { useDebouncedValue } from './hooks';
 import type { ConfigurationCheck, DatabaseDetail, PagedResult, PortalDatabase } from './types';
-import { ErrorState, Icon, LoadingState, PageTitle, Pagination, SearchInput, SortButton, StatusPill } from './ui';
+import { EnvironmentTag, ErrorState, Icon, LoadingState, PageTitle, Pagination, SearchInput, SortButton, StatusPill } from './ui';
 
-const environments = ['Prod', 'Cons', 'Test'];
+const environments = ['PROD', 'CONS', 'DEV'];
 
 export function DatabaseInventoryPage() {
   const [result, setResult] = useState<PagedResult<PortalDatabase> | null>(null);
@@ -122,8 +122,8 @@ export function DatabaseInventoryPage() {
                   >
                     <td><strong>{database.name}</strong><small>Owner: {database.owner}</small></td>
                     <td><strong className="table-secondary">{database.serverName}</strong></td>
-                    <td><span className="environment-tag">{database.environment}</span></td>
-                    <td>{database.recoveryModel}<small>Compat {database.compatibilityLevel ?? '–'}</small></td>
+                    <td><EnvironmentTag value={database.environment} /></td>
+                    <td>{database.recoveryModel}</td>
                     <td>{database.sizeGb === null ? '–' : formatStorage(database.sizeGb)}</td>
                     <td title={formatDateTime(database.lastFullBackupAtUtc)}>{relativeTime(database.lastFullBackupAtUtc)}</td>
                     <td className="muted" title={formatDateTime(database.collectedAtUtc)}>{relativeTime(database.collectedAtUtc)}</td>

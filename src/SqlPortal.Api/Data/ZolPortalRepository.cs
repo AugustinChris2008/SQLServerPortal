@@ -30,9 +30,12 @@ public sealed class ZolPortalRepository : IPortalRepository
                     'Unbekannt'),
                 Description = NULLIF(LTRIM(RTRIM(description)), ''),
                 Classification = CASE
-                    WHEN CHARINDEX('##', COALESCE(description, '')) > 0
-                    THEN NULLIF(LTRIM(RTRIM(SUBSTRING(description,
-                        CHARINDEX('##', description) + 2, 255))), '')
+                    WHEN classificationMarker.FirstHash > 0
+                     AND classificationEnd.SecondHash > classificationMarker.FirstHash
+                    THEN NULLIF(LTRIM(RTRIM(SUBSTRING(
+                        description,
+                        classificationMarker.FirstHash + 1,
+                        classificationEnd.SecondHash - classificationMarker.FirstHash - 1))), '')
                     ELSE NULL
                 END,
                 SqlServerVersion = COALESCE(NULLIF(LTRIM(RTRIM(sqlserverversion)), ''), 'Nicht ermittelt'),
@@ -49,6 +52,15 @@ public sealed class ZolPortalRepository : IPortalRepository
                     ELSE SWITCHOFFSET(scan_date AT TIME ZONE 'Central European Standard Time', '+00:00')
                 END
             FROM [ZZImportTest].[dbo].[zol_ready4import]
+            CROSS APPLY
+            (
+                SELECT FirstHash = CHARINDEX('#', COALESCE(description, ''))
+            ) AS classificationMarker
+            CROSS APPLY
+            (
+                SELECT SecondHash = CHARINDEX(
+                    '#', COALESCE(description, ''), classificationMarker.FirstHash + 1)
+            ) AS classificationEnd
         ),
         ParsedRows AS
         (
@@ -59,9 +71,9 @@ public sealed class ZolPortalRepository : IPortalRepository
                     source.ServerKey, '|', COALESCE(CONVERT(varchar(20), source.SqlDatabaseId), ''),
                     '|', source.DatabaseName))) & 2147483647 AS int),
                 Environment = CASE
-                    WHEN UPPER(COALESCE(source.Classification, '')) LIKE '%PROD%' THEN N'Prod'
-                    WHEN UPPER(COALESCE(source.Classification, '')) LIKE '%CONS%' THEN N'Cons'
-                    WHEN UPPER(COALESCE(source.Classification, '')) LIKE '%TEST%' THEN N'Test'
+                    WHEN UPPER(COALESCE(source.Classification, '')) = 'PROD' THEN N'PROD'
+                    WHEN UPPER(COALESCE(source.Classification, '')) = 'CONS' THEN N'CONS'
+                    WHEN UPPER(COALESCE(source.Classification, '')) = 'DEV' THEN N'DEV'
                     ELSE N'Nicht klassifiziert'
                 END,
                 NormalizedVersion = CASE
@@ -112,7 +124,7 @@ public sealed class ZolPortalRepository : IPortalRepository
                     WHEN parsed.DatabaseSize LIKE '% GB' THEN parsed.SizeNumber
                     WHEN parsed.DatabaseSize LIKE '% KB' THEN parsed.SizeNumber / 1048576
                     ELSE parsed.SizeNumber / 1024
-                END AS decimal(18, 2)),
+                END AS decimal(18, 6)),
                 LastFullBackupAtUtc = CASE
                     WHEN parsed.BackupToken LIKE '[12][0-9][0-9][0-9][01][0-9][0-3][0-9]_[0-2][0-9][0-5][0-9][0-5][0-9]'
                     THEN SWITCHOFFSET(
@@ -479,7 +491,7 @@ public sealed class ZolPortalRepository : IPortalRepository
         var command = new CommandDefinition(sql, cancellationToken: cancellationToken);
         using var grid = await connection.QueryMultipleAsync(command);
         return new ServerFilterOptions(
-            ["Prod", "Cons", "Test"],
+            ["PROD", "CONS", "DEV"],
             (await grid.ReadAsync<string>()).AsList(),
             (await grid.ReadAsync<string>()).AsList());
     }

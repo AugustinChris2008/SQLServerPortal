@@ -2,14 +2,15 @@ import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type Rea
 import { portalApi } from './api';
 import { formatDateTime, formatNumber, formatStorage, relativeTime } from './format';
 import { useDebouncedValue } from './hooks';
-import type { ConfigurationCheck, PagedResult, PortalServer, ServerDetail, ServerFilterOptions } from './types';
-import { ErrorState, Icon, LoadingState, PageTitle, Pagination, SearchInput, SortButton, StatusPill } from './ui';
+import type { ConfigurationCheck, PagedResult, PortalServer, ServerConfigurationSummary, ServerDetail, ServerFilterOptions } from './types';
+import { EnvironmentTag, ErrorState, Icon, LoadingState, PageTitle, Pagination, SearchInput, SortButton, StatusPill } from './ui';
 
-const environments = ['Prod', 'Cons', 'Test'];
+const environments = ['PROD', 'CONS', 'DEV'];
 
 export function ServerInventoryPage() {
   const [result, setResult] = useState<PagedResult<PortalServer> | null>(null);
   const [filterOptions, setFilterOptions] = useState<ServerFilterOptions | null>(null);
+  const [configurationSummaries, setConfigurationSummaries] = useState<ServerConfigurationSummary[] | null>(null);
   const [search, setSearch] = useState('');
   const [environment, setEnvironment] = useState('');
   const [version, setVersion] = useState('');
@@ -33,6 +34,12 @@ export function ServerInventoryPage() {
       .then(setFilterOptions)
       .catch((error: unknown) => {
         if (!(error instanceof DOMException && error.name === 'AbortError')) setFilterOptions(null);
+      });
+    setConfigurationSummaries(null);
+    portalApi.configurationOverview(controller.signal)
+      .then((overview) => setConfigurationSummaries(overview.servers))
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) setConfigurationSummaries([]);
       });
     return () => controller.abort();
   }, [reloadKey]);
@@ -126,6 +133,7 @@ export function ServerInventoryPage() {
                   <th><SortButton label="SQL-Version" field="version" activeField={sortBy} direction={sortDirection} onChange={updateSort} /></th>
                   <th><SortButton label="Edition" field="edition" activeField={sortBy} direction={sortDirection} onChange={updateSort} /></th>
                   <th><SortButton label="Datenbanken" field="databaseCount" activeField={sortBy} direction={sortDirection} onChange={updateSort} /></th>
+                  <th>Konfiguration</th>
                   <th><SortButton label="Datenstand" field="collectedAtUtc" activeField={sortBy} direction={sortDirection} onChange={updateSort} /></th>
                 </tr></thead>
                 <tbody>{result.items.map((server) => (
@@ -140,10 +148,11 @@ export function ServerInventoryPage() {
                   >
                     <td><strong>{server.name}</strong><small>{server.instanceName}</small></td>
                     <td className="server-description" title={server.description ?? undefined}>{server.description ?? '–'}</td>
-                    <td><span className="environment-tag">{server.environment}</span></td>
+                    <td><EnvironmentTag value={server.environment} /></td>
                     <td>{server.version}</td>
                     <td>{server.edition}</td>
                     <td>{formatNumber(server.databaseCount)}</td>
+                    <td><ServerConfigurationState server={server} summaries={configurationSummaries} /></td>
                     <td><strong className={`snapshot-age snapshot-age--${snapshotAgeTone(server.collectedAtUtc)}`}>{relativeTime(server.collectedAtUtc)}</strong><small>{formatDateTime(server.collectedAtUtc)}</small></td>
                   </tr>
                 ))}</tbody>
@@ -244,6 +253,58 @@ function DetailSection({ title, count, children }: { title: string; count: numbe
 
 function configurationScope(check: ConfigurationCheck): string {
   return [check.category, check.databaseName, check.objectName].filter(Boolean).join(' · ');
+}
+
+function ServerConfigurationState({
+  server,
+  summaries,
+}: {
+  server: PortalServer;
+  summaries: ServerConfigurationSummary[] | null;
+}) {
+  if (summaries === null) return <span className="muted">Wird geladen …</span>;
+
+  const summary = findConfigurationSummary(server, summaries);
+  if (!summary) return <StatusPill status="Keine Prüfung" />;
+
+  const status = summary.driftedChecks > 0
+    ? 'Abweichung'
+    : summary.unknownChecks > 0
+      ? 'Nicht ermittelt'
+      : 'Konform';
+  const affectedChecks = summary.driftedChecks > 0 ? summary.driftedChecks : summary.unknownChecks;
+  const detail = status === 'Konform'
+    ? `${formatNumber(summary.totalChecks)} Prüfungen`
+    : `${formatNumber(affectedChecks)} von ${formatNumber(summary.totalChecks)}`;
+
+  return (
+    <div
+      className="server-configuration-state"
+      title={`${detail} Konfigurationsprüfungen: ${status}`}
+    >
+      <StatusPill status={status} />
+      <small>{detail}</small>
+    </div>
+  );
+}
+
+function findConfigurationSummary(
+  server: PortalServer,
+  summaries: ServerConfigurationSummary[],
+): ServerConfigurationSummary | undefined {
+  const matchingId = summaries.find((summary) => summary.serverId === server.id);
+  if (matchingId) return matchingId;
+
+  const serverName = server.name.trim().toLocaleLowerCase();
+  const instanceName = server.instanceName.trim().toLocaleLowerCase();
+  const qualifiedName = instanceName === '' || instanceName === 'mssqlserver' || instanceName === serverName
+    ? serverName
+    : `${serverName}\\${instanceName}`;
+
+  return summaries.find((summary) => {
+    const summaryName = summary.serverName.trim().toLocaleLowerCase();
+    return summaryName === qualifiedName || summaryName === serverName;
+  });
 }
 
 function snapshotAgeTone(value: string | null): 'recent' | 'week' | 'old' | 'unknown' {
