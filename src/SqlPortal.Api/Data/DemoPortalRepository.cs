@@ -5,6 +5,18 @@ namespace SqlPortal.Api.Data;
 
 public sealed class DemoPortalRepository : IPortalRepository
 {
+    private static readonly IReadOnlyDictionary<int, int> CpuCoresByServerId =
+        new Dictionary<int, int>
+        {
+            [1] = 32,
+            [2] = 24,
+            [3] = 16,
+            [4] = 12,
+            [5] = 8,
+            [6] = 8,
+            [7] = 4
+        };
+
     private readonly TimeProvider _timeProvider;
     private readonly IReadOnlyList<PortalServer> _servers;
     private readonly IReadOnlyList<PortalDatabase> _databases;
@@ -192,6 +204,28 @@ public sealed class DemoPortalRepository : IPortalRepository
         return Task.FromResult(overview);
     }
 
+    public Task<AnalyticsOverview> GetAnalyticsOverviewAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var totalCpuCores = CpuCoresByServerId.Values.Sum();
+        var licensableCpuCores = _servers
+            .Where(server => !IsLicenseExemptEdition(server.Edition))
+            .Sum(server => CpuCoresByServerId.GetValueOrDefault(server.Id));
+
+        var overview = new AnalyticsOverview(
+            "Demo",
+            _timeProvider.GetUtcNow(),
+            new AnalyticsMetrics(
+                totalCpuCores,
+                licensableCpuCores,
+                (licensableCpuCores + 1) / 2),
+            Distribution(_servers.Select(server => server.Edition)),
+            Distribution(_servers.Select(server => server.Version)));
+
+        return Task.FromResult(overview);
+    }
+
     public Task<PagedResult<PortalServer>> GetServersAsync(
         PortalQuery query,
         CancellationToken cancellationToken)
@@ -272,7 +306,8 @@ public sealed class DemoPortalRepository : IPortalRepository
             new("sqlserverversion", server.Version),
             new("sqlserverskuname", server.Edition),
             new("classification", server.Environment),
-            new("scan_date", server.CollectedAtUtc?.ToString("O"))
+            new("scan_date", server.CollectedAtUtc?.ToString("O")),
+            new("CpuCoreCount", CpuCoresByServerId.GetValueOrDefault(server.Id).ToString(CultureInfo.InvariantCulture))
         ];
         var detail = new ServerDetail(
             server,
@@ -500,6 +535,18 @@ public sealed class DemoPortalRepository : IPortalRepository
         "Nicht ermittelt" => 1,
         _ => 2
     };
+
+    private static AnalyticsDistributionItem[] Distribution(IEnumerable<string> values) =>
+        values
+            .GroupBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new AnalyticsDistributionItem(group.Key, group.Count()))
+            .OrderByDescending(item => item.ServerCount)
+            .ThenBy(item => item.Label)
+            .ToArray();
+
+    private static bool IsLicenseExemptEdition(string edition) =>
+        edition.Contains("Developer", StringComparison.OrdinalIgnoreCase)
+        || edition.Contains("Express", StringComparison.OrdinalIgnoreCase);
 
     private static decimal Percentage(int value, int total) =>
         total == 0 ? 0 : Math.Round(value * 100m / total, 1);

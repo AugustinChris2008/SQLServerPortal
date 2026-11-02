@@ -14,6 +14,10 @@ public static class PortalApi
             .WithName("GetOverview")
             .WithSummary("Returns the portal dashboard summary.");
 
+        api.MapGet("/analytics/overview", GetAnalyticsOverview)
+            .WithName("GetAnalyticsOverview")
+            .WithSummary("Returns CPU licensing and SQL Server distribution analytics.");
+
         api.MapGet("/servers", GetServers)
             .WithName("GetServers")
             .WithSummary("Returns a filtered and paged server list.");
@@ -49,6 +53,11 @@ public static class PortalApi
         IPortalRepository repository,
         CancellationToken cancellationToken) =>
         Results.Ok(await repository.GetOverviewAsync(cancellationToken));
+
+    private static async Task<IResult> GetAnalyticsOverview(
+        IPortalRepository repository,
+        CancellationToken cancellationToken) =>
+        Results.Ok(await repository.GetAnalyticsOverviewAsync(cancellationToken));
 
     private static async Task<IResult> GetServers(
         string? search,

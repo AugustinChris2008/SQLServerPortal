@@ -22,7 +22,11 @@ export function DatabaseInventoryPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailFailed, setDetailFailed] = useState(false);
   const [detailReloadKey, setDetailReloadKey] = useState(0);
+  const [detailParameterSearch, setDetailParameterSearch] = useState('');
+  const [detailConfigurationSearch, setDetailConfigurationSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
+  const detailParameters = filterParameters(detail?.parameters ?? [], detailParameterSearch);
+  const detailConfigurationChecks = filterConfigurationChecks(detail?.configurationChecks ?? [], detailConfigurationSearch);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -79,7 +83,11 @@ export function DatabaseInventoryPage() {
 
   function updateSearch(value: string) { setSearch(value); setPage(1); }
   function updateSort(field: string, direction: 'asc' | 'desc') { setSortBy(field); setSortDirection(direction); setPage(1); }
-  function openDetail(database: PortalDatabase) { setSelectedDatabase(database); }
+  function openDetail(database: PortalDatabase) {
+    setDetailParameterSearch('');
+    setDetailConfigurationSearch('');
+    setSelectedDatabase(database);
+  }
   function openDetailWithKeyboard(event: ReactKeyboardEvent<HTMLTableRowElement>, database: PortalDatabase) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -89,7 +97,7 @@ export function DatabaseInventoryPage() {
 
   return (
     <>
-      <PageTitle eyebrow="Snapshot-Inventar" title="Datenbanken" description="Datenbanken, Klassifizierung, Recovery und Sicherungsstand aus der letzten Erfassung." />
+      <PageTitle eyebrow="Scan-Inventar" title="Datenbanken" description="Datenbanken, Klassifizierung, Recovery und Sicherungsstand aus der letzten Erfassung." />
       <section className="panel list-panel database-list-panel">
         <div className="filter-bar database-filter-bar">
           <SearchInput value={search} onChange={updateSearch} placeholder="Datenbank, Server oder Owner suchen …" />
@@ -164,34 +172,46 @@ export function DatabaseInventoryPage() {
                     <DetailField label="Datenstand" value={formatDateTime(detail.database.collectedAtUtc)} />
                   </section>
 
-                  <DetailSection title="Alle Parameter" count={detail.parameters.length}>
-                    <div className="server-parameter-grid">
-                      {detail.parameters.map((parameter) => (
-                        <div key={parameter.name} className="server-parameter">
-                          <span>{parameter.name}</span>
-                          <code title={parameter.value ?? undefined}>{parameter.value ?? 'NULL'}</code>
-                        </div>
-                      ))}
+                  <DetailSection title="Alle Parameter" count={detail.parameters.length} collapsible>
+                    <div className="detail-section-toolbar">
+                      <SearchInput value={detailParameterSearch} onChange={setDetailParameterSearch} placeholder="Datenbankparameter suchen …" />
+                      {detailParameterSearch && <span>{formatNumber(detailParameters.length)} von {formatNumber(detail.parameters.length)}</span>}
                     </div>
+                    {detailParameters.length > 0 ? (
+                      <div className="server-parameter-grid">
+                        {detailParameters.map((parameter) => (
+                          <div key={parameter.name} className="server-parameter">
+                            <span>{parameter.name}</span>
+                            <code title={parameter.value ?? undefined}>{parameter.value ?? 'NULL'}</code>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <div className="server-detail-empty">Kein Datenbankparameter entspricht der Suche.</div>}
                   </DetailSection>
 
                   {detail.configurationChecks.length > 0 && (
-                    <DetailSection title="Konfigurationen" count={detail.configurationChecks.length}>
-                      <div className="table-scroll server-detail-table-scroll">
-                        <table className="server-detail-configuration-table">
-                          <thead><tr><th>Prüfung</th><th>SOLL</th><th>IST</th><th>Konfiguriert</th><th>Laufend</th><th>Status</th></tr></thead>
-                          <tbody>{detail.configurationChecks.map((check) => (
-                            <tr key={check.id}>
-                              <td><strong className="parameter-name">{check.parameterName}</strong><small>{configurationScope(check)}</small></td>
-                              <td><code>{check.expectedValue}</code></td>
-                              <td><code>{check.actualValue ?? '–'}</code></td>
-                              <td><code>{check.configuredValue ?? '–'}</code></td>
-                              <td><code>{check.runningValue ?? '–'}</code></td>
-                              <td><StatusPill status={check.status} /></td>
-                            </tr>
-                          ))}</tbody>
-                        </table>
+                    <DetailSection title="Konfigurationen" count={detail.configurationChecks.length} collapsible>
+                      <div className="detail-section-toolbar">
+                        <SearchInput value={detailConfigurationSearch} onChange={setDetailConfigurationSearch} placeholder="Konfigurationsparameter suchen …" />
+                        {detailConfigurationSearch && <span>{formatNumber(detailConfigurationChecks.length)} von {formatNumber(detail.configurationChecks.length)}</span>}
                       </div>
+                      {detailConfigurationChecks.length > 0 ? (
+                        <div className="table-scroll server-detail-table-scroll">
+                          <table className="server-detail-configuration-table">
+                            <thead><tr><th>Prüfung</th><th>SOLL</th><th>IST</th><th>Konfiguriert</th><th>Laufend</th><th>Status</th></tr></thead>
+                            <tbody>{detailConfigurationChecks.map((check) => (
+                              <tr key={check.id}>
+                                <td><strong className="parameter-name">{check.parameterName}</strong><small>{configurationScope(check)}</small></td>
+                                <td><code>{check.expectedValue}</code></td>
+                                <td><code>{check.actualValue ?? '–'}</code></td>
+                                <td><code>{check.configuredValue ?? '–'}</code></td>
+                                <td><code>{check.runningValue ?? '–'}</code></td>
+                                <td><StatusPill status={check.status} /></td>
+                              </tr>
+                            ))}</tbody>
+                          </table>
+                        </div>
+                      ) : <div className="server-detail-empty">Kein Konfigurationsparameter entspricht der Suche.</div>}
                     </DetailSection>
                   )}
                 </>
@@ -208,10 +228,46 @@ function DetailField({ label, value, wide = false }: { label: string; value: str
   return <div className={`server-detail-field${wide ? ' server-detail-field--wide' : ''}`}><span>{label}</span><strong>{value ?? '–'}</strong></div>;
 }
 
-function DetailSection({ title, count, children }: { title: string; count: number; children: ReactNode }) {
-  return <section className="server-detail-section"><header><h3>{title}</h3><span>{formatNumber(count)}</span></header>{children}</section>;
+function DetailSection({ title, count, children, collapsible = false }: { title: string; count: number; children: ReactNode; collapsible?: boolean }) {
+  const [expanded, setExpanded] = useState(true);
+  return (
+    <section className={`server-detail-section${collapsible ? ' server-detail-section--collapsible' : ''}`}>
+      <header>
+        <h3>{title}</h3>
+        <span>{formatNumber(count)}</span>
+        {collapsible && (
+          <button type="button" className="section-toggle" aria-expanded={expanded} aria-label={`${title} ${expanded ? 'zuklappen' : 'aufklappen'}`} onClick={() => setExpanded((value) => !value)}>
+            <Icon name="chevron-down" size={18} />
+          </button>
+        )}
+      </header>
+      {(!collapsible || expanded) && <div className="server-detail-section__content">{children}</div>}
+    </section>
+  );
 }
 
 function configurationScope(check: ConfigurationCheck): string {
-  return [check.category, check.databaseName, check.objectName].filter(Boolean).join(' · ');
+  return [check.category, check.databaseName].filter(Boolean).join(' · ');
+}
+
+function filterParameters(parameters: DatabaseDetail['parameters'], search: string): DatabaseDetail['parameters'] {
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  if (!normalizedSearch) return parameters;
+  return parameters.filter((parameter) => [parameter.name, parameter.value]
+    .some((value) => value?.toLocaleLowerCase().includes(normalizedSearch)));
+}
+
+function filterConfigurationChecks(checks: ConfigurationCheck[], search: string): ConfigurationCheck[] {
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  if (!normalizedSearch) return checks;
+  return checks.filter((check) => [
+    check.parameterName,
+    check.category,
+    check.databaseName,
+    check.expectedValue,
+    check.actualValue,
+    check.configuredValue,
+    check.runningValue,
+    check.status,
+  ].some((value) => value?.toLocaleLowerCase().includes(normalizedSearch)));
 }

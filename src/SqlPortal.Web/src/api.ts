@@ -1,4 +1,5 @@
 import type {
+  AnalyticsOverview,
   ConfigurationCheck,
   ConfigurationOverview,
   DatabaseDetail,
@@ -38,6 +39,8 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 export const portalApi = {
   overview: (signal?: AbortSignal) =>
     getJson<PortalOverview>('/api/v1/overview', signal),
+  analyticsOverview: (signal?: AbortSignal) =>
+    getJson<AnalyticsOverview>('/api/v1/analytics/overview', signal),
   servers: (query: ListQuery, signal?: AbortSignal) =>
     getJson<PagedResult<PortalServer>>(`/api/v1/servers${toQueryString(query)}`, signal),
   serverFilters: (signal?: AbortSignal) =>

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { portalApi } from './api';
-import { formatDateTime, formatNumber, formatPercent, relativeTime } from './format';
+import { formatDateTime, formatNumber, relativeTime } from './format';
 import type { PortalOverview } from './types';
-import { EnvironmentTag, ErrorState, Icon, LoadingState, PageTitle, StatusPill } from './ui';
+import { EnvironmentTag, ErrorState, Icon, LoadingState, PageTitle } from './ui';
 
-export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | 'databases') => void }) {
+export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | 'databases' | 'configuration') => void }) {
   const [overview, setOverview] = useState<PortalOverview | null>(null);
+  const [misconfiguredServers, setMisconfiguredServers] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -16,6 +17,7 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | '
     const controller = new AbortController();
     setLoading(true);
     setFailed(false);
+    setMisconfiguredServers(null);
     portalApi.overview(controller.signal)
       .then(setOverview)
       .catch((error: unknown) => {
@@ -23,6 +25,13 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | '
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
+      });
+    portalApi.configurationOverview(controller.signal)
+      .then((configuration) => {
+        setMisconfiguredServers(configuration.servers.filter((server) => server.driftedChecks > 0).length);
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) setMisconfiguredServers(null);
       });
     return () => controller.abort();
   }, [reloadKey]);
@@ -51,14 +60,15 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | '
 
       <div className="demo-banner snapshot-banner">
         <span className="demo-banner__icon"><Icon name="clock" size={18} /></span>
-        <div><strong>{overview.sourceMode === 'Demo' ? 'Demo-Snapshots aktiv' : 'Snapshot-Daten'}</strong><span>Keine Liveüberwachung: Jeder Wert zeigt den zuletzt erfassten Datenstand.</span></div>
+        <div><strong>{overview.sourceMode === 'Demo' ? 'Demo-Scans aktiv' : 'Scan-Daten'}</strong><span>Keine Liveüberwachung: Jeder Wert zeigt den zuletzt erfassten Datenstand.</span></div>
         <span className="demo-banner__freshness"><Icon name="clock" size={15} /> Ältester Stand {relativeTime(overview.oldestCollectedAtUtc)}</span>
       </div>
 
       <section className="metric-grid dashboard-metric-grid" aria-label="Kennzahlen">
         <MetricCard label="SQL Server" value={formatNumber(metrics.totalServers)} detail="erfasste Instanzen" icon="server" tone="blue" onClick={() => onNavigate('servers')} />
         <MetricCard label="Datenbanken" value={formatNumber(metrics.totalDatabases)} detail="laut letzter Erfassung" icon="database" tone="violet" onClick={() => onNavigate('databases')} />
-        <MetricCard label="Auffälligkeiten" value={formatNumber(metrics.attentionDatabases)} detail="im letzten Snapshot" icon="alert" tone={metrics.attentionDatabases > 0 ? 'red' : 'green'} onClick={() => onNavigate('databases')} />
+        <MetricCard label="Nicht konform" value={misconfiguredServers === null ? '–' : formatNumber(misconfiguredServers)} detail="Server mit Abweichung" icon="settings" tone={misconfiguredServers === null ? 'amber' : misconfiguredServers > 0 ? 'red' : 'green'} onClick={() => onNavigate('configuration')} />
+        <MetricCard label="Auffälligkeiten" value={formatNumber(metrics.attentionDatabases)} detail="im letzten Scan" icon="alert" tone={metrics.attentionDatabases > 0 ? 'red' : 'green'} onClick={() => onNavigate('databases')} />
       </section>
 
       <section className="dashboard-grid">
@@ -85,48 +95,31 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | '
           </div>
         </article>
 
-        <article className="panel alerts-panel">
-          <PanelHeader title="Auffälligkeiten im Snapshot" subtitle="Status aus der jeweiligen letzten Erfassung" action={<button className="text-button" onClick={() => onNavigate('databases')}>Alle Datenbanken</button>} />
-          {overview.databaseAlerts.length === 0 ? (
-            <div className="all-clear"><Icon name="check" size={28} /><strong>Keine Auffälligkeit erfasst</strong><span>Im letzten Snapshot liegen keine Datenbankwarnungen vor.</span></div>
-          ) : (
-            <div className="alert-list">
-              {overview.databaseAlerts.map((database) => (
-                <div className="alert-row" key={database.id}>
-                  <span className={`alert-row__icon alert-row__icon--${database.status === 'Kritisch' ? 'danger' : 'warning'}`}><Icon name="database" size={18} /></span>
-                  <div><strong>{database.name}</strong><span>{database.serverName} · {database.environment}</span></div>
-                  <div className="alert-row__meta"><StatusPill status={database.status} /><span>Log {formatPercent(database.logUsedPercent)}</span></div>
-                </div>
-              ))}
-            </div>
-          )}
+        <article className="panel table-panel dashboard-oldest-scans">
+          <PanelHeader title="Älteste Server-Scans" subtitle="Description, Klassifizierung und Datenstand" action={<button className="text-button" onClick={() => onNavigate('servers')}>Alle Server</button>} />
+          <div className="table-scroll">
+            <table>
+              <thead><tr><th>Server</th><th>Description</th><th>Umgebung</th><th>Datenbanken</th><th>Datenstand</th></tr></thead>
+              <tbody>
+                {overview.focusServers.map((server) => (
+                  <tr key={server.id}>
+                    <td><strong>{server.name}</strong><small>{server.version} · {server.edition}</small></td>
+                    <td>{server.description ?? '–'}</td>
+                    <td><EnvironmentTag value={server.environment} /></td>
+                    <td>{server.databaseCount}</td>
+                    <td className="muted" title={formatDateTime(server.collectedAtUtc)}>{relativeTime(server.collectedAtUtc)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </article>
-      </section>
-
-      <section className="panel table-panel">
-        <PanelHeader title="Älteste Server-Snapshots" subtitle="Description, Klassifizierung und Datenstand" action={<button className="text-button" onClick={() => onNavigate('servers')}>Alle Server</button>} />
-        <div className="table-scroll">
-          <table>
-            <thead><tr><th>Server</th><th>Description</th><th>Umgebung</th><th>Datenbanken</th><th>Datenstand</th></tr></thead>
-            <tbody>
-              {overview.focusServers.map((server) => (
-                <tr key={server.id}>
-                  <td><strong>{server.name}</strong><small>{server.version} · {server.edition}</small></td>
-                  <td>{server.description ?? '–'}</td>
-                  <td><EnvironmentTag value={server.environment} /></td>
-                  <td>{server.databaseCount}</td>
-                  <td className="muted" title={formatDateTime(server.collectedAtUtc)}>{relativeTime(server.collectedAtUtc)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </section>
     </>
   );
 }
 
-function MetricCard({ label, value, detail, icon, tone, onClick }: { label: string; value: string; detail: string; icon: 'server' | 'database' | 'storage' | 'alert'; tone: string; onClick?: () => void }) {
+function MetricCard({ label, value, detail, icon, tone, onClick }: { label: string; value: string; detail: string; icon: 'server' | 'database' | 'storage' | 'alert' | 'settings'; tone: string; onClick?: () => void }) {
   const content = <><span className={`metric-card__icon metric-card__icon--${tone}`}><Icon name={icon} size={22} /></span><div><span>{label}</span><strong>{value}</strong><small>{detail}</small></div></>;
   return onClick ? <button className="metric-card metric-card--button" onClick={onClick}>{content}</button> : <article className="metric-card">{content}</article>;
 }

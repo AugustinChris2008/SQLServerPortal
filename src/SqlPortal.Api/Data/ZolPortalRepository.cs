@@ -424,6 +424,100 @@ public sealed class ZolPortalRepository : IPortalRepository
             alerts);
     }
 
+    public async Task<AnalyticsOverview> GetAnalyticsOverviewAsync(
+        CancellationToken cancellationToken)
+    {
+        var sql = ServerRowsCte + """
+            , LatestCpuValues AS
+            (
+                SELECT
+                    ServerName = UPPER(LTRIM(RTRIM(currentValue.SqlServer))),
+                    CpuCoreCount = TRY_CONVERT(int, COALESCE(
+                        NULLIF(LTRIM(RTRIM(currentValue.RunningValue)), N''),
+                        NULLIF(LTRIM(RTRIM(currentValue.ConfiguredValue)), N''))),
+                    ValueRank = ROW_NUMBER() OVER
+                    (
+                        PARTITION BY
+                            UPPER(LTRIM(RTRIM(currentValue.SqlServer))),
+                            COALESCE(NULLIF(LTRIM(RTRIM(currentValue.SqlInstance)), N''), N'')
+                        ORDER BY currentValue.CollectedAt DESC
+                    )
+                FROM [Backupparameter].[dbo].[ComplianceCurrentValues] AS currentValue
+                WHERE UPPER(LTRIM(RTRIM(currentValue.CheckName))) = N'CPUCORECOUNT'
+            ),
+            CpuPerPhysicalServer AS
+            (
+                SELECT
+                    ServerName,
+                    CpuCoreCount = MAX(CpuCoreCount)
+                FROM LatestCpuValues
+                WHERE ValueRank = 1
+                  AND CpuCoreCount > 0
+                GROUP BY ServerName
+            ),
+            EditionByPhysicalServer AS
+            (
+                SELECT
+                    ServerName = UPPER(LTRIM(RTRIM(ServerName))),
+                    IsLicenseExempt = CASE
+                        WHEN SUM(CASE
+                            WHEN UPPER(NormalizedEdition) NOT LIKE N'%DEVELOPER%'
+                             AND UPPER(NormalizedEdition) NOT LIKE N'%EXPRESS%'
+                                THEN 1 ELSE 0 END) = 0
+                            THEN 1 ELSE 0
+                    END
+                FROM ServerRows
+                WHERE ServerRank = 1
+                GROUP BY UPPER(LTRIM(RTRIM(ServerName)))
+            ),
+            CpuTotals AS
+            (
+                SELECT
+                    TotalCpuCores = COALESCE(SUM(cpu.CpuCoreCount), 0),
+                    LicensableCpuCores = COALESCE(SUM(CASE
+                        WHEN COALESCE(edition.IsLicenseExempt, 0) = 0 THEN cpu.CpuCoreCount
+                        ELSE 0 END), 0)
+                FROM CpuPerPhysicalServer AS cpu
+                LEFT JOIN EditionByPhysicalServer AS edition
+                    ON edition.ServerName = cpu.ServerName
+            )
+            SELECT
+                TotalCpuCores,
+                LicensableCpuCores,
+                SqlLicenseCount = CONVERT(int, CEILING(LicensableCpuCores / 2.0))
+            FROM CpuTotals;
+            """ + ServerRowsCte + """
+            SELECT
+                Label = NormalizedEdition,
+                ServerCount = COUNT(1)
+            FROM ServerRows
+            WHERE ServerRank = 1
+            GROUP BY NormalizedEdition
+            ORDER BY ServerCount DESC, Label;
+            """ + ServerRowsCte + """
+            SELECT
+                Label = NormalizedVersion,
+                ServerCount = COUNT(1)
+            FROM ServerRows
+            WHERE ServerRank = 1
+            GROUP BY NormalizedVersion
+            ORDER BY ServerCount DESC, Label;
+            """;
+
+        await using var connection = CreateConnection();
+        var command = new CommandDefinition(sql, cancellationToken: cancellationToken);
+        using var grid = await connection.QueryMultipleAsync(command);
+        var metrics = await grid.ReadSingleAsync<AnalyticsMetrics>();
+        var editions = (await grid.ReadAsync<AnalyticsDistributionItem>()).AsList();
+        var versions = (await grid.ReadAsync<AnalyticsDistributionItem>()).AsList();
+        return new AnalyticsOverview(
+            "SqlServer",
+            _timeProvider.GetUtcNow(),
+            metrics,
+            editions,
+            versions);
+    }
+
     public async Task<PagedResult<PortalServer>> GetServersAsync(
         PortalQuery query,
         CancellationToken cancellationToken)
@@ -591,13 +685,36 @@ public sealed class ZolPortalRepository : IPortalRepository
                 CASE Status WHEN N'Abweichung' THEN 0 WHEN N'Nicht ermittelt' THEN 1 ELSE 2 END,
                 Category,
                 ParameterName;
+            SELECT TOP (1)
+                CpuCoreCount = TRY_CONVERT(int, COALESCE(
+                    NULLIF(LTRIM(RTRIM(currentValue.RunningValue)), N''),
+                    NULLIF(LTRIM(RTRIM(currentValue.ConfiguredValue)), N'')))
+            FROM [Backupparameter].[dbo].[ComplianceCurrentValues] AS currentValue
+            WHERE UPPER(LTRIM(RTRIM(currentValue.CheckName))) = N'CPUCORECOUNT'
+              AND UPPER(LTRIM(RTRIM(currentValue.SqlServer))) = UPPER(LTRIM(RTRIM(@ServerName)))
+              AND
+              (
+                  NULLIF(LTRIM(RTRIM(currentValue.SqlInstance)), N'') IS NULL
+                  OR @InstanceName IS NULL
+                  OR LTRIM(RTRIM(currentValue.SqlInstance)) = LTRIM(RTRIM(@InstanceName))
+                  OR @InstanceName LIKE CONCAT(N'%\', LTRIM(RTRIM(currentValue.SqlInstance)))
+                  OR LTRIM(RTRIM(currentValue.SqlInstance)) LIKE CONCAT(N'%\', @InstanceName)
+              )
+            ORDER BY currentValue.CollectedAt DESC;
             """;
         await using var configurationConnection = CreateConnection();
         var configurationCommand = new CommandDefinition(
             configurationSql,
             new { ServerName = server.Name, server.InstanceName },
             cancellationToken: cancellationToken);
-        var checks = (await configurationConnection.QueryAsync<ConfigurationCheck>(configurationCommand)).AsList();
+        using var configurationGrid = await configurationConnection.QueryMultipleAsync(configurationCommand);
+        var checks = (await configurationGrid.ReadAsync<ConfigurationCheck>()).AsList();
+        var cpuCoreCount = await configurationGrid.ReadSingleOrDefaultAsync<int?>();
+        parameters = parameters
+            .Concat([new ServerParameter(
+                "CpuCoreCount",
+                cpuCoreCount?.ToString(CultureInfo.InvariantCulture))])
+            .ToArray();
 
         return new ServerDetail(server, parameters, databases, checks);
     }

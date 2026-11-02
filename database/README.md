@@ -2,7 +2,7 @@
 
 ## Aktive Datenquelle
 
-Der Modus `SqlServer` liest direkt aus `[ZZImportTest].[dbo].[zol_ready4import]`, `[Backupparameter].[dbo].[ComplianceRules]` und `[Backupparameter].[dbo].[ComplianceResults]`. Dafür sind keine Views und keine Schreibrechte erforderlich. Die feste Zuordnung befindet sich in `ZolPortalRepository`.
+Der Modus `SqlServer` liest direkt aus `[ZZImportTest].[dbo].[zol_ready4import]`, `[Backupparameter].[dbo].[ComplianceRules]`, `[Backupparameter].[dbo].[ComplianceResults]` und `[Backupparameter].[dbo].[ComplianceCurrentValues]`. Dafür sind keine Views und keine Schreibrechte erforderlich. Die feste Zuordnung befindet sich in `ZolPortalRepository`.
 
 - Server: Gruppierung über `hardwareid`, ersatzweise `hostname` oder `sqlserverinstance`.
 - Umgebung: Die Klassifizierung zwischen dem ersten und zweiten `#` in `description` wird auf `DEV`, `PROD` oder `CONS` normalisiert, beispielsweise `100088#DEV#Zollner SQL Cluster Node 2`.
@@ -13,6 +13,7 @@ Der Modus `SqlServer` liest direkt aus `[ZZImportTest].[dbo].[zol_ready4import]`
 - Nullwerte: werden als unbekannt beziehungsweise `NULL` weitergegeben und nicht durch erfundene Messwerte ersetzt.
 - Status: bleibt `Unbewertet`, weil die Tabelle keinen belastbaren Live- oder Health-Status enthält.
 - Konfiguration: Der SOLL-Wert und die Beschreibung kommen vorrangig aus `ComplianceRules`; `ComplianceResults` liefert Server, Instanz, Scope, IST-/Configured-/Running-Werte und den Bewertungsstatus. `CollectedAt` bezeichnet die Erfassung des IST-Werts, `EvaluatedAt` die spätere Bewertung. Es werden sowohl konforme als auch abweichende Ergebnisse gespeichert.
+- Analysen: `ComplianceCurrentValues` liefert den jeweils letzten `CpuCoreCount`. Mehrere SQL-Instanzen desselben Hosts werden für die Kernsumme nur einmal berücksichtigt; Developer und Express zählen nicht zum Lizenzbedarf.
 - Konfigurations-Snapshot: Je Kombination aus Server, Instanz, Datenbank, Objekt und Check wird nur der neueste Datensatz nach `EvaluatedAt` angezeigt.
 - Bewertung: `COMPLIANT` wird als `Konform`, `NON_COMPLIANT` als `Abweichung` und nicht auswertbare Zustände als `Nicht ermittelt` angezeigt.
 

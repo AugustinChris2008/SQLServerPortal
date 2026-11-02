@@ -6,6 +6,8 @@ public interface IPortalRepository
 {
     Task<PortalOverview> GetOverviewAsync(CancellationToken cancellationToken);
 
+    Task<AnalyticsOverview> GetAnalyticsOverviewAsync(CancellationToken cancellationToken);
+
     Task<PagedResult<PortalServer>> GetServersAsync(
         PortalQuery query,
         CancellationToken cancellationToken);

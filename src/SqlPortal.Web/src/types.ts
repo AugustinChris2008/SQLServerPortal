@@ -96,6 +96,25 @@ export interface PortalOverview {
   databaseAlerts: DatabaseAlert[];
 }
 
+export interface AnalyticsMetrics {
+  totalCpuCores: number;
+  licensableCpuCores: number;
+  sqlLicenseCount: number;
+}
+
+export interface AnalyticsDistributionItem {
+  label: string;
+  serverCount: number;
+}
+
+export interface AnalyticsOverview {
+  sourceMode: 'Demo' | 'SqlServer';
+  generatedAtUtc: string;
+  metrics: AnalyticsMetrics;
+  editions: AnalyticsDistributionItem[];
+  versions: AnalyticsDistributionItem[];
+}
+
 export interface ConfigurationCheck {
   id: number;
   serverId: number;

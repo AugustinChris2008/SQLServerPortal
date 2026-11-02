@@ -193,13 +193,79 @@ BEGIN TRY
     TRUNCATE TABLE $ResultsTable;
 
 
-    ;WITH ComplianceData AS
+    -- Physische Spaltenbelegung im bestehenden Datenmodell:
+    -- Environment = Klassifikation (PROD, CONS, TEST oder DEV)
+    -- ServerType  = Umgebung (Cluster oder Standalone)
+    ;WITH RuleCandidates AS
     (
         SELECT
             S.SqlServer,
             S.SqlInstance,
             S.Environment,
             S.ServerType,
+            R.CheckName,
+            R.ExpectedValue,
+            R.[Description],
+            ROW_NUMBER() OVER
+            (
+                PARTITION BY
+                    S.SqlServer,
+                    ISNULL(S.SqlInstance, N''),
+                    R.CheckName
+                ORDER BY
+                    CASE
+                        WHEN UPPER(LTRIM(RTRIM(R.Environment))) = UPPER(LTRIM(RTRIM(S.Environment)))
+                            THEN 1 ELSE 0
+                    END DESC,
+                    CASE
+                        WHEN UPPER(LTRIM(RTRIM(R.ServerType))) = UPPER(LTRIM(RTRIM(S.ServerType)))
+                            THEN 1 ELSE 0
+                    END DESC,
+                    R.CheckName
+            ) AS RuleRank
+
+        FROM $ServerTable AS S
+
+        INNER JOIN $RulesTable AS R
+            ON
+            (
+                R.Environment = S.Environment
+                OR R.Environment IS NULL
+                OR LTRIM(RTRIM(R.Environment)) = N''
+                OR UPPER(LTRIM(RTRIM(R.Environment))) = N'ALL'
+            )
+            AND
+            (
+                R.ServerType = S.ServerType
+                OR R.ServerType IS NULL
+                OR LTRIM(RTRIM(R.ServerType)) = N''
+                OR UPPER(LTRIM(RTRIM(R.ServerType))) = N'ALL'
+            )
+    ),
+
+
+    SelectedRules AS
+    (
+        SELECT
+            SqlServer,
+            SqlInstance,
+            Environment,
+            ServerType,
+            CheckName,
+            ExpectedValue,
+            [Description]
+        FROM RuleCandidates
+        WHERE RuleRank = 1
+    ),
+
+
+    ComplianceData AS
+    (
+        SELECT
+            R.SqlServer,
+            R.SqlInstance,
+            R.Environment,
+            R.ServerType,
 
             C.DatabaseName,
             C.ObjectName,
@@ -219,27 +285,11 @@ BEGIN TRY
                     NULLIF(LTRIM(RTRIM(C.ConfiguredValue)), N'')
             END AS ActualValue
 
-        FROM $ServerTable AS S
-
-        INNER JOIN $RulesTable AS R
-            ON
-            (
-                R.Environment = S.Environment
-                OR R.Environment IS NULL
-                OR LTRIM(RTRIM(R.Environment)) = N''
-                OR UPPER(LTRIM(RTRIM(R.Environment))) = N'ALL'
-            )
-            AND
-            (
-                R.ServerType = S.ServerType
-                OR R.ServerType IS NULL
-                OR LTRIM(RTRIM(R.ServerType)) = N''
-                OR UPPER(LTRIM(RTRIM(R.ServerType))) = N'ALL'
-            )
+        FROM SelectedRules AS R
 
         LEFT JOIN $CurrentValuesTable AS C
-            ON C.SqlServer = S.SqlServer
-            AND ISNULL(C.SqlInstance, N'') = ISNULL(S.SqlInstance, N'')
+            ON C.SqlServer = R.SqlServer
+            AND ISNULL(C.SqlInstance, N'') = ISNULL(R.SqlInstance, N'')
             AND C.CheckName = R.CheckName
     ),
 

@@ -132,6 +132,44 @@ public sealed class SqlPortalRepository : IPortalRepository
             alerts);
     }
 
+    public async Task<AnalyticsOverview> GetAnalyticsOverviewAsync(
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT
+                TotalCpuCores = 0,
+                LicensableCpuCores = 0,
+                SqlLicenseCount = 0;
+
+            SELECT
+                Label = COALESCE(NULLIF(LTRIM(RTRIM(Edition)), N''), N'Nicht ermittelt'),
+                ServerCount = COUNT(1)
+            FROM portal.vServerOverview
+            GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(Edition)), N''), N'Nicht ermittelt')
+            ORDER BY ServerCount DESC, Label;
+
+            SELECT
+                Label = COALESCE(NULLIF(LTRIM(RTRIM(Version)), N''), N'Nicht ermittelt'),
+                ServerCount = COUNT(1)
+            FROM portal.vServerOverview
+            GROUP BY COALESCE(NULLIF(LTRIM(RTRIM(Version)), N''), N'Nicht ermittelt')
+            ORDER BY ServerCount DESC, Label;
+            """;
+
+        await using var connection = CreateConnection();
+        var command = new CommandDefinition(sql, cancellationToken: cancellationToken);
+        using var grid = await connection.QueryMultipleAsync(command);
+        var metrics = await grid.ReadSingleAsync<AnalyticsMetrics>();
+        var editions = (await grid.ReadAsync<AnalyticsDistributionItem>()).AsList();
+        var versions = (await grid.ReadAsync<AnalyticsDistributionItem>()).AsList();
+        return new AnalyticsOverview(
+            "SqlServer",
+            _timeProvider.GetUtcNow(),
+            metrics,
+            editions,
+            versions);
+    }
+
     public async Task<PagedResult<PortalServer>> GetServersAsync(
         PortalQuery query,
         CancellationToken cancellationToken)

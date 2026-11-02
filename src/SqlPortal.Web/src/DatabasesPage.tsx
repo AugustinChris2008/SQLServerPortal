@@ -38,7 +38,7 @@ export function DatabasesPage() {
 
   return (
     <>
-      <PageTitle eyebrow="Snapshot-Inventar" title="Datenbanken" description="Status, Kapazität und Sicherungsstand aus der letzten Erfassung." />
+      <PageTitle eyebrow="Scan-Inventar" title="Datenbanken" description="Status, Kapazität und Sicherungsstand aus der letzten Erfassung." />
       <section className="panel list-panel">
         <div className="filter-bar">
           <SearchInput value={search} onChange={updateSearch} placeholder="Datenbank, Server oder Owner suchen …" />

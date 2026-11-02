@@ -88,7 +88,12 @@ if ($Servers.Count -eq 0) {
 Write-Host "$($Servers.Count) Server/Instanzen geladen." -ForegroundColor Green
 
 $Servers |
-    Format-Table SqlServer, SqlInstance, Environment, ServerType -AutoSize
+    Format-Table `
+        SqlServer, `
+        SqlInstance, `
+        @{ Label = "Klassifikation"; Expression = { $_.Environment } }, `
+        @{ Label = "Umgebung"; Expression = { $_.ServerType } } `
+        -AutoSize
 
 
 # =================================================================================================
@@ -182,8 +187,8 @@ if (-not $SqlServerName) {
 
     Write-Section "Server: $TargetInstance"
 
-    Write-Host "Environment: $($Server.Environment)"
-    Write-Host "ServerType:  $($Server.ServerType)"
+    Write-Host "Klassifikation: $($Server.Environment)"
+    Write-Host "Umgebung:       $($Server.ServerType)"
 
 
     # =============================================================================================
@@ -218,6 +223,53 @@ if (-not $SqlServerName) {
     }
 
     Write-Host "Verbindung erfolgreich." -ForegroundColor Green
+
+
+    # =============================================================================================
+    # BLOCK - CPU-KERNE DES SERVERS AUSLESEN
+    # =============================================================================================
+
+    Write-Section "CPU-KERNE"
+
+    $CpuCoreQuery = @"
+SELECT
+    CpuCoreCount = CONVERT(INT, socket_count * cores_per_socket)
+FROM sys.dm_os_sys_info;
+"@
+
+    try {
+        $CpuCoreInfo = Invoke-DbaQuery `
+            -SqlInstance $TargetInstance `
+            -Database master `
+            -Query $CpuCoreQuery `
+            -As PSObject `
+            -EnableException |
+            Select-Object -First 1
+
+        if ($null -eq $CpuCoreInfo -or $null -eq $CpuCoreInfo.CpuCoreCount) {
+            Write-Host "CPU-Kernanzahl konnte auf $TargetInstance nicht ermittelt werden." -ForegroundColor Yellow
+        }
+        else {
+            $CpuCoreCount = [int]$CpuCoreInfo.CpuCoreCount
+
+            $CollectedValues += [PSCustomObject]@{
+                SqlServer       = $SqlServerName
+                SqlInstance     = $StoredInstanceName
+                DatabaseName    = $null
+                ObjectName      = $null
+                CheckName       = "CpuCoreCount"
+                ConfiguredValue = $null
+                RunningValue    = [string]$CpuCoreCount
+                CollectedAt     = $RunTimestamp
+            }
+
+            Write-Host "$CpuCoreCount CPU-Kerne ermittelt." -ForegroundColor Green
+        }
+    }
+    catch {
+        Write-Host "FEHLER beim Auslesen der CPU-Kerne auf $TargetInstance" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+    }
 
 
     # =============================================================================================

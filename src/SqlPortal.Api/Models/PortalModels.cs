@@ -86,6 +86,22 @@ public sealed record DatabaseAlert(
     DateTimeOffset? LastFullBackupAtUtc,
     DateTimeOffset? CollectedAtUtc);
 
+public sealed record AnalyticsOverview(
+    string SourceMode,
+    DateTimeOffset GeneratedAtUtc,
+    AnalyticsMetrics Metrics,
+    IReadOnlyList<AnalyticsDistributionItem> Editions,
+    IReadOnlyList<AnalyticsDistributionItem> Versions);
+
+public sealed record AnalyticsMetrics(
+    int TotalCpuCores,
+    int LicensableCpuCores,
+    int SqlLicenseCount);
+
+public sealed record AnalyticsDistributionItem(
+    string Label,
+    int ServerCount);
+
 public sealed record ConfigurationCheck(
     int Id,
     int ServerId,

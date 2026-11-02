@@ -37,7 +37,7 @@ export function ServersPage() {
 
   return (
     <>
-      <PageTitle eyebrow="Snapshot-Inventar" title="SQL Server" description="Instanzen, Versionen und RAM-Kapazitäten aus der letzten Erfassung." />
+      <PageTitle eyebrow="Scan-Inventar" title="SQL Server" description="Instanzen, Versionen und RAM-Kapazitäten aus der letzten Erfassung." />
       <section className="panel list-panel">
         <div className="filter-bar">
           <SearchInput value={search} onChange={updateSearch} placeholder="Server, Instanz oder Version suchen …" />

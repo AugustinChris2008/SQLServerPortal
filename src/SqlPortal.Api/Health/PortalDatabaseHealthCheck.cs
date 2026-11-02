@@ -39,6 +39,9 @@ public sealed class PortalDatabaseHealthCheck(IConfiguration configuration) : IH
                     SELECT TOP (0) CAST(1 AS int)
                     FROM [Backupparameter].[dbo].[ComplianceResults]
                     UNION ALL
+                    SELECT TOP (0) CAST(1 AS int)
+                    FROM [Backupparameter].[dbo].[ComplianceCurrentValues]
+                    UNION ALL
                     SELECT CAST(1 AS int)
                 ) AS readableSources;
                 """;

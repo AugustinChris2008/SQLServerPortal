@@ -17,6 +17,7 @@ export function ConfigurationServerPage() {
   const [serverSearch, setServerSearch] = useState('');
   const [classification, setClassification] = useState('');
   const [evaluation, setEvaluation] = useState('');
+  const [configurationSearch, setConfigurationSearch] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -120,8 +121,18 @@ export function ConfigurationServerPage() {
     };
   }, [overview]);
 
+  const filteredChecks = useMemo(
+    () => filterConfigurationChecks(checks ?? [], configurationSearch),
+    [checks, configurationSearch],
+  );
+
   function reload() {
     setReloadKey((value) => value + 1);
+  }
+
+  function openConfigurationDetails(server: ServerConfigurationSummary) {
+    setConfigurationSearch('');
+    setSelectedServer(server);
   }
 
   if (overviewLoading && !overview) return <LoadingState label="Konfigurationsprüfung wird aufgebaut" />;
@@ -171,7 +182,7 @@ export function ConfigurationServerPage() {
             {filteredServers.map((server) => {
               const status = serverStatus(server);
               return (
-                <button key={server.serverId} className="server-compliance-row server-compliance-row--expanded" aria-haspopup="dialog" onClick={() => setSelectedServer(server)}>
+                <button key={server.serverId} className="server-compliance-row server-compliance-row--expanded" aria-haspopup="dialog" onClick={() => openConfigurationDetails(server)}>
                   <div>
                     <strong>{server.serverName}</strong>
                     <span><EnvironmentTag value={server.environment} /> Stand {relativeTime(server.collectedAtUtc)}</span>
@@ -218,7 +229,15 @@ export function ConfigurationServerPage() {
               {checksFailed && <ErrorState retry={() => setChecksReloadKey((value) => value + 1)} />}
               {checks && !checksLoading && (
                 checks.length > 0
-                  ? <ConfigurationGroups checks={checks} />
+                  ? <>
+                    <div className="detail-section-toolbar configuration-detail-toolbar">
+                      <SearchInput value={configurationSearch} onChange={setConfigurationSearch} placeholder="Konfigurationsparameter suchen …" />
+                      {configurationSearch && <span>{formatNumber(filteredChecks.length)} von {formatNumber(checks.length)}</span>}
+                    </div>
+                    {filteredChecks.length > 0
+                      ? <ConfigurationGroups checks={filteredChecks} />
+                      : <div className="server-detail-empty">Kein Konfigurationsparameter entspricht der Suche.</div>}
+                  </>
                   : <div className="server-detail-empty">Für diesen Server liegen keine Konfigurationsprüfungen vor.</div>
               )}
             </div>
@@ -231,43 +250,62 @@ export function ConfigurationServerPage() {
 
 function ConfigurationGroups({ checks }: { checks: ConfigurationCheck[] }) {
   const groups = [
-    { title: 'Nicht erfüllt', tone: 'danger', checks: checks.filter((check) => check.status === 'Abweichung') },
-    { title: 'Nicht ermittelt', tone: 'neutral', checks: checks.filter((check) => check.status === 'Nicht ermittelt') },
-    { title: 'Erfüllt', tone: 'success', checks: checks.filter((check) => check.status !== 'Abweichung' && check.status !== 'Nicht ermittelt') },
+    { title: 'Nicht erfüllt', tone: 'danger' as const, checks: checks.filter((check) => check.status === 'Abweichung') },
+    { title: 'Nicht ermittelt', tone: 'neutral' as const, checks: checks.filter((check) => check.status === 'Nicht ermittelt') },
+    { title: 'Erfüllt', tone: 'success' as const, checks: checks.filter((check) => check.status !== 'Abweichung' && check.status !== 'Nicht ermittelt') },
   ];
 
   return (
     <div className="configuration-detail-groups">
-      {groups.filter((group) => group.checks.length > 0).map((group) => (
-        <section key={group.title} className={`configuration-detail-group configuration-detail-group--${group.tone}`}>
-          <header><div><h3>{group.title}</h3><span>{group.tone === 'danger' ? 'SOLL und IST weichen voneinander ab' : group.tone === 'neutral' ? 'Kein auswertbarer IST-Wert' : 'SOLL und IST stimmen überein'}</span></div><strong>{formatNumber(group.checks.length)}</strong></header>
-          <div className="table-scroll configuration-detail-table-scroll">
-            <table className="configuration-detail-table">
-              <thead><tr><th>Parameter</th><th>Servertyp</th><th>SOLL</th><th>IST</th><th>Konfiguriert</th><th>Laufend</th><th>Status</th><th>Stand</th></tr></thead>
-              <tbody>{group.checks.map((check) => {
-                const scope = configurationScope(check);
-                return (
-                  <tr key={check.id} className={check.status === 'Abweichung' ? 'configuration-row--drift' : ''}>
-                    <td className="configuration-parameter-cell">
-                      <strong className="parameter-name">{check.parameterName}</strong>
-                      {scope && <small>{scope}</small>}
-                      {check.description && <small className="configuration-description" title={check.description}>{check.description}</small>}
-                    </td>
-                    <td><span className="environment-tag">{check.category}</span></td>
-                    <td><ConfigurationValue value={check.expectedValue} unit={check.unit} expected /></td>
-                    <td><ConfigurationValue value={check.actualValue} unit={check.unit} drifted={check.status === 'Abweichung'} /></td>
-                    <td><ConfigurationValue value={check.configuredValue} unit={check.unit} /></td>
-                    <td><ConfigurationValue value={check.runningValue} unit={check.unit} /></td>
-                    <td><StatusPill status={check.status} /></td>
-                    <td className="muted" title={formatDateTime(check.collectedAtUtc)}>{relativeTime(check.collectedAtUtc)}</td>
-                  </tr>
-                );
-              })}</tbody>
-            </table>
-          </div>
-        </section>
-      ))}
+      {groups.filter((group) => group.checks.length > 0).map((group) => <ConfigurationGroup key={group.title} {...group} />)}
     </div>
+  );
+}
+
+function ConfigurationGroup({ title, tone, checks }: { title: string; tone: 'danger' | 'neutral' | 'success'; checks: ConfigurationCheck[] }) {
+  const [expanded, setExpanded] = useState(true);
+  const description = tone === 'danger'
+    ? 'SOLL und IST weichen voneinander ab'
+    : tone === 'neutral'
+      ? 'Kein auswertbarer IST-Wert'
+      : 'SOLL und IST stimmen überein';
+
+  return (
+    <section className={`configuration-detail-group configuration-detail-group--${tone}`}>
+      <header>
+        <div><h3>{title}</h3><span>{description}</span></div>
+        <strong>{formatNumber(checks.length)}</strong>
+        <button type="button" className="section-toggle" aria-expanded={expanded} aria-label={`${title} ${expanded ? 'zuklappen' : 'aufklappen'}`} onClick={() => setExpanded((value) => !value)}>
+          <Icon name="chevron-down" size={18} />
+        </button>
+      </header>
+      {expanded && (
+        <div className="table-scroll configuration-detail-table-scroll">
+          <table className="configuration-detail-table">
+            <thead><tr><th>Parameter</th><th>Servertyp</th><th>SOLL</th><th>IST</th><th>Konfiguriert</th><th>Laufend</th><th>Status</th><th>Stand</th></tr></thead>
+            <tbody>{checks.map((check) => {
+              const scope = configurationScope(check);
+              return (
+                <tr key={check.id} className={check.status === 'Abweichung' ? 'configuration-row--drift' : ''}>
+                  <td className="configuration-parameter-cell">
+                    <strong className="parameter-name">{check.parameterName}</strong>
+                    {scope && <small>{scope}</small>}
+                    {check.description && <small className="configuration-description" title={check.description}>{check.description}</small>}
+                  </td>
+                  <td><span className="environment-tag">{check.category}</span></td>
+                  <td><ConfigurationValue value={check.expectedValue} unit={check.unit} expected /></td>
+                  <td><ConfigurationValue value={check.actualValue} unit={check.unit} drifted={check.status === 'Abweichung'} /></td>
+                  <td><ConfigurationValue value={check.configuredValue} unit={check.unit} /></td>
+                  <td><ConfigurationValue value={check.runningValue} unit={check.unit} /></td>
+                  <td><StatusPill status={check.status} /></td>
+                  <td className="muted" title={formatDateTime(check.collectedAtUtc)}>{relativeTime(check.collectedAtUtc)}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -290,11 +328,25 @@ function ConfigurationValue({ value, unit, expected = false, drifted = false }: 
 }
 
 function configurationScope(check: ConfigurationCheck): string | null {
-  const parts = [
-    check.databaseName ? `DB: ${check.databaseName}` : null,
-    check.objectName ? `Objekt: ${check.objectName}` : null,
-  ].filter((value): value is string => value !== null);
+  const parts = [check.databaseName ? `DB: ${check.databaseName}` : null]
+    .filter((value): value is string => value !== null);
   return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+function filterConfigurationChecks(checks: ConfigurationCheck[], search: string): ConfigurationCheck[] {
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  if (!normalizedSearch) return checks;
+  return checks.filter((check) => [
+    check.parameterName,
+    check.category,
+    check.databaseName,
+    check.expectedValue,
+    check.actualValue,
+    check.configuredValue,
+    check.runningValue,
+    check.status,
+    check.description,
+  ].some((value) => value?.toLocaleLowerCase().includes(normalizedSearch)));
 }
 
 function compareChecks(left: ConfigurationCheck, right: ConfigurationCheck): number {

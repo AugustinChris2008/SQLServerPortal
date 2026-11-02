@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { DashboardPage } from './DashboardPage';
+import { AnalyticsPage } from './AnalyticsPage';
 import { ConfigurationServerPage } from './ConfigurationServerPage';
 import { DatabaseInventoryPage } from './DatabaseInventoryPage';
 import { ServerInventoryPage } from './ServerInventoryPage';
 import { Icon } from './ui';
 
-type View = 'dashboard' | 'servers' | 'databases' | 'configuration';
+type View = 'dashboard' | 'analytics' | 'servers' | 'databases' | 'configuration';
 
 function viewFromHash(): View {
   const value = window.location.hash.replace('#/', '');
-  return value === 'servers' || value === 'databases' || value === 'configuration' ? value : 'dashboard';
+  return value === 'analytics' || value === 'servers' || value === 'databases' || value === 'configuration' ? value : 'dashboard';
 }
 
 export function App() {
@@ -42,6 +43,7 @@ export function App() {
         <nav aria-label="Hauptnavigation">
           <span className="nav-label">Übersicht</span>
           <NavButton active={view === 'dashboard'} icon="dashboard" label="Dashboard" onClick={() => navigate('dashboard')} />
+          <NavButton active={view === 'analytics'} icon="chart" label="Analysen" onClick={() => navigate('analytics')} />
           <span className="nav-label nav-label--spaced">Infrastruktur</span>
           <NavButton active={view === 'servers'} icon="server" label="SQL Server" onClick={() => navigate('servers')} />
           <NavButton active={view === 'databases'} icon="database" label="Datenbanken" onClick={() => navigate('databases')} />
@@ -63,17 +65,18 @@ export function App() {
         </header>
         <main>
           {view === 'dashboard' && <DashboardPage onNavigate={navigate} />}
+          {view === 'analytics' && <AnalyticsPage />}
           {view === 'servers' && <ServerInventoryPage />}
           {view === 'databases' && <DatabaseInventoryPage />}
           {view === 'configuration' && <ConfigurationServerPage />}
         </main>
-        <footer className="page-footer"><span>SQL Operations Portal</span><span>Snapshot-Daten · Keine Liveüberwachung · Nur-Lese-Zugriff</span></footer>
+        <footer className="page-footer"><span>SQL Operations Portal</span><span>Scan-Daten · Keine Liveüberwachung · Nur-Lese-Zugriff</span></footer>
       </div>
     </div>
   );
 }
 
-function NavButton({ active, icon, label, onClick }: { active: boolean; icon: 'dashboard' | 'server' | 'database' | 'settings'; label: string; onClick: () => void }) {
+function NavButton({ active, icon, label, onClick }: { active: boolean; icon: 'dashboard' | 'chart' | 'server' | 'database' | 'settings'; label: string; onClick: () => void }) {
   return <button className={`nav-item${active ? ' nav-item--active' : ''}`} onClick={onClick}><Icon name={icon} /><span>{label}</span></button>;
 }
 

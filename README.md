@@ -1,6 +1,6 @@
 # SQL Operations Portal
 
-Read-only-Webportal für den zentralen Überblick über zeitversetzt erfasste Microsoft-SQL-Server- und Datenbankdaten. Das Portal ist bewusst als Snapshot-Inventar aufgebaut und behauptet weder Live-Verfügbarkeit noch aktuelle CPU-Auslastung. Im SQL-Modus liest es per `SELECT` aus `[ZZImportTest].[dbo].[zol_ready4import]` sowie für die Konfigurationsprüfung aus `[Backupparameter].[dbo].[ComplianceRules]` und `[Backupparameter].[dbo].[ComplianceResults]`; im Demo-Modus bleibt die bestehende Oberfläche ohne Datenbank erreichbar.
+Read-only-Webportal für den zentralen Überblick über zeitversetzt erfasste Microsoft-SQL-Server- und Datenbankdaten. Das Portal ist bewusst als Snapshot-Inventar aufgebaut und behauptet weder Live-Verfügbarkeit noch aktuelle CPU-Auslastung. Im SQL-Modus liest es per `SELECT` aus `[ZZImportTest].[dbo].[zol_ready4import]` sowie für Konfiguration und Analysen aus `[Backupparameter].[dbo].[ComplianceRules]`, `[Backupparameter].[dbo].[ComplianceResults]` und `[Backupparameter].[dbo].[ComplianceCurrentValues]`; im Demo-Modus bleibt die bestehende Oberfläche ohne Datenbank erreichbar.
 
 ## Enthalten
 
@@ -46,7 +46,7 @@ Das Frontend läuft dann auf `http://localhost:5173` und leitet API-Aufrufe an `
 
 ## SQL Server anschließen
 
-1. Den lokalen SQL-Login `SqlPortal` mit ausschließlich `SELECT` auf `[ZZImportTest].[dbo].[zol_ready4import]`, `[Backupparameter].[dbo].[ComplianceRules]` und `[Backupparameter].[dbo].[ComplianceResults]` verwenden.
+1. Den lokalen SQL-Login `SqlPortal` mit ausschließlich `SELECT` auf `[ZZImportTest].[dbo].[zol_ready4import]`, `[Backupparameter].[dbo].[ComplianceRules]`, `[Backupparameter].[dbo].[ComplianceResults]` und `[Backupparameter].[dbo].[ComplianceCurrentValues]` verwenden.
 2. `.env.example` als `.env` kopieren und `SQLPORTAL_PASSWORD` durch das echte Kennwort ersetzen.
 3. Die Konfiguration verwendet SQL-Authentifizierung und `ApplicationIntent=ReadOnly`:
 
