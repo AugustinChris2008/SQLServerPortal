@@ -214,9 +214,9 @@ public sealed class RestoreTestRepository : IRestoreTestRepository
                     SELECT SourceServer = CASE
                         WHEN NULLIF(LTRIM(RTRIM(source.sqlserverinstance)), '') IS NULL
                             THEN LTRIM(RTRIM(source.hostname))
-                        WHEN CHARINDEX('\\', LTRIM(RTRIM(source.sqlserverinstance))) > 0
+                        WHEN CHARINDEX('\', LTRIM(RTRIM(source.sqlserverinstance))) > 0
                             THEN LTRIM(RTRIM(source.sqlserverinstance))
-                        ELSE CONCAT(LTRIM(RTRIM(source.hostname)), '\\',
+                        ELSE CONCAT(LTRIM(RTRIM(source.hostname)), '\',
                             LTRIM(RTRIM(source.sqlserverinstance)))
                     END
                 ) AS sourceKey
