@@ -6,7 +6,7 @@ using System.Globalization;
 namespace SqlPortal.Api.Data;
 
 /// <summary>
-/// Read-only projection of the ZOL inventory and Backupparameter compliance tables
+/// Read-only projection of the SQLPortal inventory view and compliance tables
 /// onto the existing portal API.
 /// </summary>
 public sealed class ZolPortalRepository : IPortalRepository
@@ -51,7 +51,7 @@ public sealed class ZolPortalRepository : IPortalRepository
                     WHEN scan_date IS NULL THEN NULL
                     ELSE SWITCHOFFSET(scan_date AT TIME ZONE 'Central European Standard Time', '+00:00')
                 END
-            FROM [ZZImportTest].[dbo].[zol_ready4import]
+            FROM [dbo].[v_SQLPortalDataOverview]
             CROSS APPLY
             (
                 SELECT FirstHash = CHARINDEX('#', COALESCE(description, ''))
@@ -172,6 +172,46 @@ public sealed class ZolPortalRepository : IPortalRepository
         )
         """;
 
+    private const string SupportLifecycleCte = ServerRowsCte + """
+        , ActiveVersions AS
+        (
+            SELECT
+                Version = NormalizedVersion,
+                ServerCount = COUNT(1)
+            FROM ServerRows
+            WHERE ServerRank = 1
+            GROUP BY NormalizedVersion
+        ),
+        NormalizedLifecycle AS
+        (
+            SELECT
+                Version = CASE
+                    WHEN UPPER(ProductName) LIKE '%SQL SERVER 2025%' THEN N'SQL Server 2025'
+                    WHEN UPPER(ProductName) LIKE '%SQL SERVER 2022%' THEN N'SQL Server 2022'
+                    WHEN UPPER(ProductName) LIKE '%SQL SERVER 2019%' THEN N'SQL Server 2019'
+                    WHEN UPPER(ProductName) LIKE '%SQL SERVER 2017%' THEN N'SQL Server 2017'
+                    WHEN UPPER(ProductName) LIKE '%SQL SERVER 2016%' THEN N'SQL Server 2016'
+                    WHEN UPPER(ProductName) LIKE '%SQL SERVER 2014%' THEN N'SQL Server 2014'
+                    WHEN UPPER(ProductName) LIKE '%SQL SERVER 2012%' THEN N'SQL Server 2012'
+                    WHEN UPPER(ProductName) LIKE '%SQL SERVER 2008 R2%' THEN N'SQL Server 2008 R2'
+                    WHEN UPPER(ProductName) LIKE '%SQL SERVER 2008%' THEN N'SQL Server 2008'
+                    ELSE NULLIF(LTRIM(RTRIM(ProductName)), '')
+                END,
+                EndOfMainstreamSupport,
+                EndOfExtendedSupport
+            FROM [dbo].[SQLServerSupportLifecycle]
+        ),
+        LifecycleByVersion AS
+        (
+            SELECT
+                Version,
+                EndOfMainstreamSupport = MAX(EndOfMainstreamSupport),
+                EndOfExtendedSupport = MAX(EndOfExtendedSupport)
+            FROM NormalizedLifecycle
+            GROUP BY Version
+        )
+        """;
+
     private const string CurrentConfigurationCte = """
         ;WITH RankedComplianceResults AS
         (
@@ -187,7 +227,7 @@ public sealed class ZolPortalRepository : IPortalRepository
                         compliance.CheckName
                     ORDER BY compliance.EvaluatedAt DESC
                 )
-            FROM [Backupparameter].[dbo].[ComplianceResults] AS compliance
+            FROM [dbo].[ComplianceResults] AS compliance
         ),
         CurrentComplianceResults AS
         (
@@ -240,7 +280,7 @@ public sealed class ZolPortalRepository : IPortalRepository
                 SELECT TOP (1)
                     ExpectedValue = NULLIF(LTRIM(RTRIM(complianceRule.ExpectedValue)), N''),
                     Description = NULLIF(LTRIM(RTRIM(complianceRule.Description)), N'')
-                FROM [Backupparameter].[dbo].[ComplianceRules] AS complianceRule
+                FROM [dbo].[ComplianceRules] AS complianceRule
                 WHERE LTRIM(RTRIM(complianceRule.CheckName)) = LTRIM(RTRIM(currentResult.CheckName))
                   AND (NULLIF(LTRIM(RTRIM(complianceRule.Environment)), '') IS NULL
                     OR LTRIM(RTRIM(complianceRule.Environment)) = LTRIM(RTRIM(currentResult.Environment)))
@@ -392,10 +432,37 @@ public sealed class ZolPortalRepository : IPortalRepository
             """ + CurrentInventoryCte + """
             SELECT OldestCollectedAtUtc = MIN(CollectedAtUtc)
             FROM CurrentRows;
+            """ + SupportLifecycleCte + """
+            SELECT
+                activeVersion.Version,
+                activeVersion.ServerCount,
+                lifecycle.EndOfMainstreamSupport,
+                lifecycle.EndOfExtendedSupport,
+                Status = CASE
+                    WHEN lifecycle.Version IS NULL THEN N'Unbekannt'
+                    WHEN lifecycle.EndOfExtendedSupport < @Today THEN N'Nicht unterstützt'
+                    WHEN lifecycle.EndOfMainstreamSupport < @Today THEN N'Extended Support'
+                    ELSE N'Mainstream Support'
+                END
+            FROM ActiveVersions AS activeVersion
+            LEFT JOIN LifecycleByVersion AS lifecycle
+                ON lifecycle.Version = activeVersion.Version
+            ORDER BY
+                CASE
+                    WHEN lifecycle.Version IS NULL THEN 1
+                    WHEN lifecycle.EndOfExtendedSupport < @Today THEN 0
+                    WHEN lifecycle.EndOfMainstreamSupport < @Today THEN 2
+                    ELSE 3
+                END,
+                lifecycle.EndOfExtendedSupport,
+                activeVersion.Version;
             """;
 
         await using var connection = CreateConnection();
-        var command = new CommandDefinition(sql, cancellationToken: cancellationToken);
+        var command = new CommandDefinition(
+            sql,
+            new { Today = _timeProvider.GetUtcNow().UtcDateTime.Date },
+            cancellationToken: cancellationToken);
         using var grid = await connection.QueryMultipleAsync(command);
 
         var servers = await grid.ReadSingleAsync<ServerMetricsRow>();
@@ -404,6 +471,13 @@ public sealed class ZolPortalRepository : IPortalRepository
         var focusServers = (await grid.ReadAsync<PortalServer>()).AsList();
         var alerts = (await grid.ReadAsync<DatabaseAlert>()).AsList();
         var oldest = await grid.ReadSingleAsync<OldestCollectionRow>();
+        var lifecycleVersions = (await grid.ReadAsync<SupportLifecycleVersion>()).AsList();
+        var supportLifecycle = new SupportLifecycleSummary(
+            lifecycleVersions.Where(item => item.Status == "Mainstream Support").Sum(item => item.ServerCount),
+            lifecycleVersions.Where(item => item.Status == "Extended Support").Sum(item => item.ServerCount),
+            lifecycleVersions.Where(item => item.Status == "Nicht unterstützt").Sum(item => item.ServerCount),
+            lifecycleVersions.Where(item => item.Status == "Unbekannt").Sum(item => item.ServerCount),
+            lifecycleVersions);
 
         return new PortalOverview(
             "SqlServer",
@@ -421,7 +495,8 @@ public sealed class ZolPortalRepository : IPortalRepository
                 servers.TotalMemoryGb),
             environments,
             focusServers,
-            alerts);
+            alerts,
+            supportLifecycle);
     }
 
     public async Task<AnalyticsOverview> GetAnalyticsOverviewAsync(
@@ -442,7 +517,7 @@ public sealed class ZolPortalRepository : IPortalRepository
                             COALESCE(NULLIF(LTRIM(RTRIM(currentValue.SqlInstance)), N''), N'')
                         ORDER BY currentValue.CollectedAt DESC
                     )
-                FROM [Backupparameter].[dbo].[ComplianceCurrentValues] AS currentValue
+                FROM [dbo].[ComplianceCurrentValues] AS currentValue
                 WHERE UPPER(LTRIM(RTRIM(currentValue.CheckName))) = N'CPUCORECOUNT'
             ),
             CpuPerPhysicalServer AS
@@ -611,7 +686,7 @@ public sealed class ZolPortalRepository : IPortalRepository
             WHERE ServerRank = 1 AND ServerId = @ServerId;
             """ + """
             SELECT TOP (1) source.*
-            FROM [ZZImportTest].[dbo].[zol_ready4import] AS source
+            FROM [dbo].[v_SQLPortalDataOverview] AS source
             CROSS APPLY
             (
                 SELECT ServerKey = CONCAT(
@@ -689,7 +764,7 @@ public sealed class ZolPortalRepository : IPortalRepository
                 CpuCoreCount = TRY_CONVERT(int, COALESCE(
                     NULLIF(LTRIM(RTRIM(currentValue.RunningValue)), N''),
                     NULLIF(LTRIM(RTRIM(currentValue.ConfiguredValue)), N'')))
-            FROM [Backupparameter].[dbo].[ComplianceCurrentValues] AS currentValue
+            FROM [dbo].[ComplianceCurrentValues] AS currentValue
             WHERE UPPER(LTRIM(RTRIM(currentValue.CheckName))) = N'CPUCORECOUNT'
               AND UPPER(LTRIM(RTRIM(currentValue.SqlServer))) = UPPER(LTRIM(RTRIM(@ServerName)))
               AND
@@ -796,7 +871,7 @@ public sealed class ZolPortalRepository : IPortalRepository
             WHERE DatabaseId = @DatabaseId;
 
             SELECT TOP (1) source.*
-            FROM [ZZImportTest].[dbo].[zol_ready4import] AS source
+            FROM [dbo].[v_SQLPortalDataOverview] AS source
             CROSS APPLY
             (
                 SELECT
@@ -878,7 +953,7 @@ public sealed class ZolPortalRepository : IPortalRepository
         var sql = CurrentConfigurationCte + """
             SELECT
                 TotalChecks = COUNT(1),
-                DefinedChecks = (SELECT COUNT(1) FROM [Backupparameter].[dbo].[ComplianceRules]),
+                DefinedChecks = (SELECT COUNT(1) FROM [dbo].[ComplianceRules]),
                 CompliantChecks = COALESCE(SUM(CASE WHEN Status = N'Konform' THEN 1 ELSE 0 END), 0),
                 DriftedChecks = COALESCE(SUM(CASE WHEN Status = N'Abweichung' THEN 1 ELSE 0 END), 0),
                 UnknownChecks = COALESCE(SUM(CASE WHEN Status = N'Nicht ermittelt' THEN 1 ELSE 0 END), 0)

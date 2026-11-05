@@ -21,6 +21,12 @@ public sealed class PortalDatabaseHealthCheck(IConfiguration configuration) : IH
             return HealthCheckResult.Unhealthy("Portal database connection string is missing.");
         }
 
+        var restoreTestConnectionString = configuration.GetConnectionString("RestoreTestDatabase");
+        if (string.IsNullOrWhiteSpace(restoreTestConnectionString))
+        {
+            return HealthCheckResult.Unhealthy("Restore-test database connection string is missing.");
+        }
+
         try
         {
             await using var connection = new SqlConnection(connectionString);
@@ -31,23 +37,34 @@ public sealed class PortalDatabaseHealthCheck(IConfiguration configuration) : IH
                 FROM
                 (
                     SELECT TOP (0) Probe = CAST(1 AS int)
-                    FROM [ZZImportTest].[dbo].[zol_ready4import]
+                    FROM [dbo].[v_SQLPortalDataOverview]
                     UNION ALL
                     SELECT TOP (0) CAST(1 AS int)
-                    FROM [Backupparameter].[dbo].[ComplianceRules]
+                    FROM [dbo].[ComplianceRules]
                     UNION ALL
                     SELECT TOP (0) CAST(1 AS int)
-                    FROM [Backupparameter].[dbo].[ComplianceResults]
+                    FROM [dbo].[ComplianceResults]
                     UNION ALL
                     SELECT TOP (0) CAST(1 AS int)
-                    FROM [Backupparameter].[dbo].[ComplianceCurrentValues]
+                    FROM [dbo].[ComplianceCurrentValues]
+                    UNION ALL
+                    SELECT TOP (0) CAST(1 AS int)
+                    FROM [dbo].[SQLServerSupportLifecycle]
                     UNION ALL
                     SELECT CAST(1 AS int)
                 ) AS readableSources;
                 """;
             command.CommandTimeout = 5;
             _ = await command.ExecuteScalarAsync(cancellationToken);
-            return HealthCheckResult.Healthy("Portal source tables are readable.");
+
+            await using var restoreConnection = new SqlConnection(restoreTestConnectionString);
+            await restoreConnection.OpenAsync(cancellationToken);
+            await using var restoreCommand = restoreConnection.CreateCommand();
+            restoreCommand.CommandText = "SELECT TOP (0) 1 FROM [dbo].[RestoreResults];";
+            restoreCommand.CommandTimeout = 5;
+            _ = await restoreCommand.ExecuteScalarAsync(cancellationToken);
+
+            return HealthCheckResult.Healthy("Portal and restore-test source tables are readable.");
         }
         catch (Exception exception)
         {

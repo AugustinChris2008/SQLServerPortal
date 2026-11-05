@@ -8,6 +8,9 @@ import type {
   PortalDatabase,
   PortalOverview,
   PortalServer,
+  RestoreTestDatabase,
+  RestoreTestHistoryDetail,
+  RestoreTestOverview,
   ServerDetail,
   ServerFilterOptions,
 } from './types';
@@ -55,5 +58,11 @@ export const portalApi = {
     getJson<ConfigurationOverview>('/api/v1/configuration/overview', signal),
   configurationChecks: (query: ListQuery, signal?: AbortSignal) =>
     getJson<PagedResult<ConfigurationCheck>>(`/api/v1/configuration/checks${toQueryString(query)}`, signal),
+  restoreTestOverview: (period: string, signal?: AbortSignal) =>
+    getJson<RestoreTestOverview>(`/api/v1/restore-tests/overview?period=${encodeURIComponent(period)}`, signal),
+  restoreTestDatabases: (query: ListQuery, signal?: AbortSignal) =>
+    getJson<PagedResult<RestoreTestDatabase>>(`/api/v1/restore-tests/databases${toQueryString(query)}`, signal),
+  restoreTestHistory: (databaseId: number, period: string, signal?: AbortSignal) =>
+    getJson<RestoreTestHistoryDetail>(`/api/v1/restore-tests/databases/${databaseId}/history?period=${encodeURIComponent(period)}`, signal),
 };
 

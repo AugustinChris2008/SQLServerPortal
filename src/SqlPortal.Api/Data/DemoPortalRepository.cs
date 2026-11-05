@@ -199,7 +199,17 @@ public sealed class DemoPortalRepository : IPortalRepository
             metrics,
             environments,
             _servers.OrderBy(server => server.CollectedAtUtc).Take(6).ToArray(),
-            alerts);
+            alerts,
+            new SupportLifecycleSummary(
+                4,
+                1,
+                0,
+                2,
+                [
+                    new("SQL Server 2019", 1, new DateTime(2025, 1, 7), new DateTime(2030, 1, 8), "Extended Support"),
+                    new("SQL Server 2022", 4, new DateTime(2028, 1, 11), new DateTime(2033, 1, 11), "Mainstream Support"),
+                    new("SQL Server 2025", 2, null, null, "Unbekannt")
+                ]));
 
         return Task.FromResult(overview);
     }

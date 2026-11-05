@@ -94,6 +94,23 @@ export interface PortalOverview {
   environments: EnvironmentSummary[];
   focusServers: PortalServer[];
   databaseAlerts: DatabaseAlert[];
+  supportLifecycle: SupportLifecycleSummary;
+}
+
+export interface SupportLifecycleSummary {
+  mainstreamSupportServers: number;
+  extendedSupportServers: number;
+  unsupportedServers: number;
+  unknownServers: number;
+  versions: SupportLifecycleVersion[];
+}
+
+export interface SupportLifecycleVersion {
+  version: string;
+  serverCount: number;
+  endOfMainstreamSupport: string | null;
+  endOfExtendedSupport: string | null;
+  status: 'Mainstream Support' | 'Extended Support' | 'Nicht unterstützt' | 'Unbekannt' | string;
 }
 
 export interface AnalyticsMetrics {
@@ -167,6 +184,90 @@ export interface ConfigurationOverview {
   servers: ServerConfigurationSummary[];
 }
 
+export interface RestoreTestMetrics {
+  totalDatabases: number;
+  successfullyTestedDatabases: number;
+  remainingDatabases: number;
+  currentFailureDatabases: number;
+  skippedDatabases: number;
+  notTestedDatabases: number;
+  totalAttemptsWithinPeriod: number;
+  neverSelectedDatabases: number;
+  selectedOnceDatabases: number;
+  selectedMultipleTimesDatabases: number;
+  repeatedAttempts: number;
+  coveragePercent: number;
+}
+
+export interface RestoreFailureCategory {
+  category: string;
+  databaseCount: number;
+}
+
+export interface RestoreTestOverview {
+  sourceMode: 'Demo' | 'SqlServer';
+  generatedAtUtc: string;
+  period: string;
+  windowStartUtc: string | null;
+  metrics: RestoreTestMetrics;
+  failureCategories: RestoreFailureCategory[];
+}
+
+export interface RestoreTestDatabase {
+  id: number;
+  sourceServer: string;
+  databaseName: string;
+  periodStatus: 'Erfolgreich' | 'Fehlgeschlagen' | 'Übersprungen' | 'Nicht getestet' | string;
+  coveredWithinPeriod: boolean;
+  selectionStatus: 'Nie wiederhergestellt' | 'Einmal wiederhergestellt' | 'Mehrfach wiederhergestellt' | string;
+  attemptCountWithinPeriod: number;
+  successfulAttemptCountWithinPeriod: number;
+  undatedAttemptCount: number;
+  latestAttemptStatus: string;
+  failureCategory: string | null;
+  testServer: string | null;
+  sizeGb: number | null;
+  backupFileExists: boolean | null;
+  restoreResult: string | null;
+  dbccResult: string | null;
+  latestAttemptAtUtc: string | null;
+  lastSuccessfulAtUtc: string | null;
+  restoreElapsed: string | null;
+  dbccElapsed: string | null;
+  fullDateUtc: string | null;
+  fullPath: string | null;
+  diffDateUtc: string | null;
+  diffPath: string | null;
+  logDates: string | null;
+  logPaths: string | null;
+}
+
+export interface RestoreTestHistoryEntry {
+  sequence: number;
+  status: string;
+  failureCategory: string | null;
+  withinPeriod: boolean;
+  testServer: string | null;
+  sizeGb: number | null;
+  backupFileExists: boolean | null;
+  restoreResult: string | null;
+  dbccResult: string | null;
+  attemptAtUtc: string | null;
+  restoreElapsed: string | null;
+  dbccElapsed: string | null;
+  fullDateUtc: string | null;
+  fullPath: string | null;
+  diffDateUtc: string | null;
+  diffPath: string | null;
+  logDates: string | null;
+  logPaths: string | null;
+}
+
+export interface RestoreTestHistoryDetail {
+  database: RestoreTestDatabase;
+  history: RestoreTestHistoryEntry[];
+}
+
 export interface PagedResult<T> {
   items: T[];
   page: number;
@@ -178,6 +279,8 @@ export interface PagedResult<T> {
 export interface ListQuery {
   search?: string;
   status?: string;
+  selection?: string;
+  period?: string;
   environment?: string;
   category?: string;
   version?: string;

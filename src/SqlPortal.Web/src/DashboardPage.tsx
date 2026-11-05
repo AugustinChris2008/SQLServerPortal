@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { portalApi } from './api';
-import { formatDateTime, formatNumber, relativeTime } from './format';
-import type { PortalOverview } from './types';
+import { formatDate, formatDateTime, formatNumber, formatRemainingSupport, relativeTime } from './format';
+import type { PortalOverview, SupportLifecycleSummary } from './types';
 import { EnvironmentTag, ErrorState, Icon, LoadingState, PageTitle } from './ui';
 
 export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | 'databases' | 'configuration') => void }) {
@@ -64,6 +64,8 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | '
         <span className="demo-banner__freshness"><Icon name="clock" size={15} /> Ältester Stand {relativeTime(overview.oldestCollectedAtUtc)}</span>
       </div>
 
+      <SupportLifecyclePanel lifecycle={overview.supportLifecycle} />
+
       <section className="metric-grid dashboard-metric-grid" aria-label="Kennzahlen">
         <MetricCard label="SQL Server" value={formatNumber(metrics.totalServers)} detail="erfasste Instanzen" icon="server" tone="blue" onClick={() => onNavigate('servers')} />
         <MetricCard label="Datenbanken" value={formatNumber(metrics.totalDatabases)} detail="laut letzter Erfassung" icon="database" tone="violet" onClick={() => onNavigate('databases')} />
@@ -117,6 +119,71 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | '
       </section>
     </>
   );
+}
+
+function SupportLifecyclePanel({ lifecycle }: { lifecycle: SupportLifecycleSummary }) {
+  const tone = lifecycle.unsupportedServers > 0
+    ? 'danger'
+    : lifecycle.extendedSupportServers > 0 || lifecycle.unknownServers > 0
+      ? 'warning'
+      : 'success';
+  const headline = lifecycle.unsupportedServers > 0
+    ? `${formatNumber(lifecycle.unsupportedServers)} SQL-Server-Instanzen ohne Herstellersupport`
+    : lifecycle.extendedSupportServers > 0
+      ? `${formatNumber(lifecycle.extendedSupportServers)} SQL-Server-Instanzen nur noch im Extended Support`
+      : lifecycle.unknownServers > 0
+        ? `Supportstatus für ${formatNumber(lifecycle.unknownServers)} SQL-Server-Instanzen unbekannt`
+        : 'Alle erfassten SQL-Server-Versionen sind im Mainstream Support';
+
+  return (
+    <section className={`support-lifecycle support-lifecycle--${tone}`} aria-label="SQL Server Supportstatus">
+      <header className="support-lifecycle__headline">
+        <span><Icon name={tone === 'success' ? 'check' : 'alert'} size={21} /></span>
+        <div>
+          <small>Microsoft Support Lifecycle</small>
+          <strong>{headline}</strong>
+          <p>Bewertung aus SQLServerSupportLifecycle; maßgeblich ist das Ende des Extended Supports.</p>
+        </div>
+      </header>
+      <div className="support-lifecycle__versions">
+        {lifecycle.versions.map((item) => (
+          <article key={item.version} className={`support-version support-version--${supportStatusTone(item.status)}`}>
+            <div className="support-version__header">
+              <div>
+                <strong>{item.version}</strong>
+                <span>{formatNumber(item.serverCount)} {item.serverCount === 1 ? 'Instanz' : 'Instanzen'}</span>
+              </div>
+              <span className="support-version__status">{item.status}</span>
+            </div>
+            <div className="support-version__remaining">
+              <span>Herstellersupport insgesamt</span>
+              <strong>{formatRemainingSupport(item.endOfExtendedSupport)}</strong>
+            </div>
+            <div className="support-version__phases">
+              <div>
+                <span>Mainstream</span>
+                <strong>{formatRemainingSupport(item.endOfMainstreamSupport)}</strong>
+                <small>bis {formatDate(item.endOfMainstreamSupport)}</small>
+              </div>
+              <div>
+                <span>Extended</span>
+                <strong>{formatRemainingSupport(item.endOfExtendedSupport)}</strong>
+                <small>bis {formatDate(item.endOfExtendedSupport)}</small>
+              </div>
+            </div>
+          </article>
+        ))}
+        {lifecycle.versions.length === 0 && <p className="support-lifecycle__empty">Keine aktiven SQL-Server-Versionen gefunden.</p>}
+      </div>
+    </section>
+  );
+}
+
+function supportStatusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
+  if (status === 'Nicht unterstützt') return 'danger';
+  if (status === 'Extended Support') return 'warning';
+  if (status === 'Mainstream Support') return 'success';
+  return 'neutral';
 }
 
 function MetricCard({ label, value, detail, icon, tone, onClick }: { label: string; value: string; detail: string; icon: 'server' | 'database' | 'storage' | 'alert' | 'settings'; tone: string; onClick?: () => void }) {

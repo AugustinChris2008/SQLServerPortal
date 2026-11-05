@@ -2,12 +2,14 @@
 
 ## Aktive Datenquelle
 
-Der Modus `SqlServer` liest direkt aus `[ZZImportTest].[dbo].[zol_ready4import]`, `[Backupparameter].[dbo].[ComplianceRules]`, `[Backupparameter].[dbo].[ComplianceResults]` und `[Backupparameter].[dbo].[ComplianceCurrentValues]`. Dafür sind keine Views und keine Schreibrechte erforderlich. Die feste Zuordnung befindet sich in `ZolPortalRepository`.
+Der Modus `SqlServer` verbindet sich ausschließlich mit `SQLPortal` und liest aus `[dbo].[v_SQLPortalDataOverview]`, `[dbo].[ComplianceRules]`, `[dbo].[ComplianceResults]`, `[dbo].[ComplianceCurrentValues]` und `[dbo].[SQLServerSupportLifecycle]`. Schreibrechte sind nicht erforderlich. Die feste Zuordnung befindet sich in `ZolPortalRepository`.
+
+Für automatische Restoretests verwendet die Anwendung eine zweite Read-only-Verbindung zur Datenbank `RestoreTest` und liest `[dbo].[RestoreResults]`. Die Grundgesamtheit bleibt unabhängig vom gewählten Zeitraum immer das aktuelle Datenbankinventar aus `SQLPortal`. Für die Kennzahlen, den Zeitraumstatus und die Restorehäufigkeit kann zwischen 1, 2, 3 und 5 Jahren sowie der gesamten verfügbaren Historie gewählt werden. Eine Datenbank gilt nur dann als abgedeckt, wenn sowohl `RestoreResult` als auch `DbccResult` innerhalb des gewählten Zeitraums den Wert `Success` haben. Fehlgeschlagene, übersprungene und nicht getestete Datenbanken bleiben in der offenen Restmenge. Zusätzlich unterscheidet das Portal zwischen nie, einmal und mehrfach wiederhergestellt; Testläufe oberhalb des ersten Restores werden als Wiederholungsläufe ausgewiesen. Die Detailansicht lädt unabhängig vom Zeitraum die vollständige chronologische Testhistorie und kennzeichnet Einträge innerhalb beziehungsweise außerhalb der Auswahl. Ergebnisse ohne Testzeitpunkt bleiben sichtbar, werden aber keinem zeitlich begrenzten Zeitraum zugerechnet.
 
 - Server: Gruppierung über `hardwareid`, ersatzweise `hostname` oder `sqlserverinstance`.
 - Umgebung: Die Klassifizierung zwischen dem ersten und zweiten `#` in `description` wird auf `DEV`, `PROD` oder `CONS` normalisiert, beispielsweise `100088#DEV#Zollner SQL Cluster Node 2`.
-- Serverdetails: Der Detailendpunkt gibt sämtliche Spalten der neuesten passenden `zol_ready4import`-Zeile sowie Datenbanken und Compliance-Prüfungen zurück.
-- Datenbankdetails: Der Detailendpunkt gibt sämtliche Spalten der neuesten passenden `zol_ready4import`-Zeile und datenbankspezifische Compliance-Prüfungen zurück.
+- Serverdetails: Der Detailendpunkt gibt sämtliche Spalten der neuesten passenden Zeile aus `v_SQLPortalDataOverview` sowie Datenbanken und Compliance-Prüfungen zurück.
+- Datenbankdetails: Der Detailendpunkt gibt sämtliche Spalten der neuesten passenden Zeile aus `v_SQLPortalDataOverview` und datenbankspezifische Compliance-Prüfungen zurück.
 - Datenbanken: `sqldb_name`, `sqldb_size`, Recovery Model, User Access, Business Contact und Full-Backup-Pfad.
 - Snapshot: Bei mehrfach vorhandenen Server-/Datenbankkombinationen wird der neueste nichtleere `scan_date` verwendet.
 - Nullwerte: werden als unbekannt beziehungsweise `NULL` weitergegeben und nicht durch erfundene Messwerte ersetzt.
@@ -16,8 +18,9 @@ Der Modus `SqlServer` liest direkt aus `[ZZImportTest].[dbo].[zol_ready4import]`
 - Analysen: `ComplianceCurrentValues` liefert den jeweils letzten `CpuCoreCount`. Mehrere SQL-Instanzen desselben Hosts werden für die Kernsumme nur einmal berücksichtigt; Developer und Express zählen nicht zum Lizenzbedarf.
 - Konfigurations-Snapshot: Je Kombination aus Server, Instanz, Datenbank, Objekt und Check wird nur der neueste Datensatz nach `EvaluatedAt` angezeigt.
 - Bewertung: `COMPLIANT` wird als `Konform`, `NON_COMPLIANT` als `Abweichung` und nicht auswertbare Zustände als `Nicht ermittelt` angezeigt.
+- Supportstatus: `SQLServerSupportLifecycle` liefert Mainstream- und Extended-Supportende. Produktnamen werden auf die SQL-Server-Versionsfamilie normalisiert; nach Ende des Extended Supports wird eine Version als `Nicht unterstützt` markiert. Nicht zuordenbare Versionen bleiben sichtbar als `Unbekannt`.
 
-Die Readiness-Prüfung referenziert alle drei Tabellen und prüft damit Verbindung, Existenz und Leseberechtigung.
+Die Readiness-Prüfung referenziert die Inventar-View und alle vier Tabellen und prüft damit Verbindung, Existenz und Leseberechtigung.
 
 ## Generischer View-Vertrag (derzeit nicht aktiv)
 
@@ -155,15 +158,34 @@ IF SUSER_ID(N'SqlPortal') IS NULL
              CHECK_EXPIRATION = ON;
 GO
 
-USE [ZZImportTest];
+USE [SQLPortal];
 GO
 
 IF USER_ID(N'SqlPortal') IS NULL
     CREATE USER [SqlPortal] FOR LOGIN [SqlPortal];
 GO
 
-GRANT SELECT ON OBJECT::[dbo].[zol_ready4import] TO [SqlPortal];
-DENY INSERT, UPDATE, DELETE ON OBJECT::[dbo].[zol_ready4import] TO [SqlPortal];
+GRANT SELECT ON OBJECT::[dbo].[v_SQLPortalDataOverview] TO [SqlPortal];
+GRANT SELECT ON OBJECT::[dbo].[ComplianceRules] TO [SqlPortal];
+GRANT SELECT ON OBJECT::[dbo].[ComplianceResults] TO [SqlPortal];
+GRANT SELECT ON OBJECT::[dbo].[ComplianceCurrentValues] TO [SqlPortal];
+GRANT SELECT ON OBJECT::[dbo].[SQLServerSupportLifecycle] TO [SqlPortal];
+
+DENY INSERT, UPDATE, DELETE ON OBJECT::[dbo].[ComplianceRules] TO [SqlPortal];
+DENY INSERT, UPDATE, DELETE ON OBJECT::[dbo].[ComplianceResults] TO [SqlPortal];
+DENY INSERT, UPDATE, DELETE ON OBJECT::[dbo].[ComplianceCurrentValues] TO [SqlPortal];
+DENY INSERT, UPDATE, DELETE ON OBJECT::[dbo].[SQLServerSupportLifecycle] TO [SqlPortal];
+GO
+
+USE [RestoreTest];
+GO
+
+IF USER_ID(N'SqlPortal') IS NULL
+    CREATE USER [SqlPortal] FOR LOGIN [SqlPortal];
+GO
+
+GRANT SELECT ON OBJECT::[dbo].[RestoreResults] TO [SqlPortal];
+DENY INSERT, UPDATE, DELETE ON OBJECT::[dbo].[RestoreResults] TO [SqlPortal];
 GO
 ```
 

@@ -9,5 +9,6 @@ services:
     environment:
       DataSource__Mode: "${SQLPORTAL_DATA_SOURCE:-Demo}"
       ConnectionStrings__PortalDatabase: "${SQLPORTAL_CONNECTION_STRING:-}"
+      ConnectionStrings__RestoreTestDatabase: "${RESTORETEST_CONNECTION_STRING:-}"
     restart: unless-stopped
 

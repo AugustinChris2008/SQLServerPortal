@@ -11,10 +11,12 @@ public static class PortalDataRegistration
         if (string.Equals(mode, "SqlServer", StringComparison.OrdinalIgnoreCase))
         {
             services.AddScoped<IPortalRepository, ZolPortalRepository>();
+            services.AddScoped<IRestoreTestRepository, RestoreTestRepository>();
         }
         else if (string.Equals(mode, "Demo", StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton<IPortalRepository, DemoPortalRepository>();
+            services.AddSingleton<IRestoreTestRepository, DemoRestoreTestRepository>();
         }
         else
         {

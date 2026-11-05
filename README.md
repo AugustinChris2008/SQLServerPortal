@@ -1,10 +1,12 @@
 # SQL Operations Portal
 
-Read-only-Webportal für den zentralen Überblick über zeitversetzt erfasste Microsoft-SQL-Server- und Datenbankdaten. Das Portal ist bewusst als Snapshot-Inventar aufgebaut und behauptet weder Live-Verfügbarkeit noch aktuelle CPU-Auslastung. Im SQL-Modus liest es per `SELECT` aus `[ZZImportTest].[dbo].[zol_ready4import]` sowie für Konfiguration und Analysen aus `[Backupparameter].[dbo].[ComplianceRules]`, `[Backupparameter].[dbo].[ComplianceResults]` und `[Backupparameter].[dbo].[ComplianceCurrentValues]`; im Demo-Modus bleibt die bestehende Oberfläche ohne Datenbank erreichbar.
+Read-only-Webportal für den zentralen Überblick über zeitversetzt erfasste Microsoft-SQL-Server- und Datenbankdaten. Das Portal ist bewusst als Snapshot-Inventar aufgebaut und behauptet weder Live-Verfügbarkeit noch aktuelle CPU-Auslastung. Im SQL-Modus liest es Inventar-, Konfigurations-, Analyse- und Supportdaten aus `SQLPortal`. Ergebnisse der automatischen Backup-Validierung kommen zusätzlich aus `[RestoreTest].[dbo].[RestoreResults]`. Im Demo-Modus bleibt die Oberfläche ohne Datenbank erreichbar.
 
 ## Enthalten
 
 - Dashboard mit Bestands-, RAM- und Datenalter-Kennzahlen
+- sofort sichtbarer Microsoft-Supportstatus je eingesetzter SQL-Server-Version
+- wählbare Zeitraumquote automatischer Restore- und DBCC-Tests mit Restorehäufigkeit, Wiederholungsläufen, vollständiger Testhistorie, Fehlerkategorien und Detailansicht
 - filter- und sortierbare Serverübersicht mit installierter RAM-Kapazität
 - filter- und sortierbare Datenbankübersicht
 - Konfigurationsprüfung mit SOLL-/IST-Vergleich, Compliance-Kennzahlen und Serverbewertung
@@ -46,13 +48,14 @@ Das Frontend läuft dann auf `http://localhost:5173` und leitet API-Aufrufe an `
 
 ## SQL Server anschließen
 
-1. Den lokalen SQL-Login `SqlPortal` mit ausschließlich `SELECT` auf `[ZZImportTest].[dbo].[zol_ready4import]`, `[Backupparameter].[dbo].[ComplianceRules]`, `[Backupparameter].[dbo].[ComplianceResults]` und `[Backupparameter].[dbo].[ComplianceCurrentValues]` verwenden.
+1. Den lokalen SQL-Login `SqlPortal` mit ausschließlich `SELECT` auf den dokumentierten Objekten in `SQLPortal` sowie `[RestoreTest].[dbo].[RestoreResults]` verwenden.
 2. `.env.example` als `.env` kopieren und `SQLPORTAL_PASSWORD` durch das echte Kennwort ersetzen.
 3. Die Konfiguration verwendet SQL-Authentifizierung und `ApplicationIntent=ReadOnly`:
 
 ```powershell
 $env:DataSource__Mode = "SqlServer"
-$env:ConnectionStrings__PortalDatabase = "Server=tcp:DEZANT101V,1433;Database=ZZImportTest;User ID=SqlPortal;Password=CHANGE_ME;Encrypt=True;TrustServerCertificate=True;ApplicationIntent=ReadOnly;Application Name=SQL Operations Portal"
+$env:ConnectionStrings__PortalDatabase = "Server=tcp:DEZANT101V,1433;Database=SQLPortal;User ID=SqlPortal;Password=CHANGE_ME;Encrypt=True;TrustServerCertificate=True;ApplicationIntent=ReadOnly;Application Name=SQL Operations Portal"
+$env:ConnectionStrings__RestoreTestDatabase = "Server=tcp:DEZANT101V,1433;Database=RestoreTest;User ID=SqlPortal;Password=CHANGE_ME;Encrypt=True;TrustServerCertificate=True;ApplicationIntent=ReadOnly;Application Name=SQL Operations Portal"
 ```
 
 Für Docker wird die lokale, von Git ignorierte `.env` verwendet:
@@ -64,7 +67,7 @@ docker compose up --detach --build
 
 `.env` wird von Git ignoriert. Das Kennwort gehört weder in das Image noch in Git. Für den ersten internen Verbindungstest ist in `.env.example` `TrustServerCertificate=True` gesetzt; nach Bereitstellung der Unternehmens-CA sollte dies auf `False` geändert werden.
 
-`ApplicationIntent=ReadOnly` ersetzt keine Datenbankberechtigungen. Der Login muss auf SQL-Server-Seite auf `SELECT` für die drei benötigten Tabellen begrenzt bleiben. Die Anwendung enthält im aktiven Repository ausschließlich feste, parametrisierte `SELECT`-Abfragen.
+`ApplicationIntent=ReadOnly` ersetzt keine Datenbankberechtigungen. Der Login muss auf SQL-Server-Seite auf `SELECT` für die dokumentierten Tabellen und Views begrenzt bleiben. Die Anwendung enthält im aktiven Repository ausschließlich feste, parametrisierte `SELECT`-Abfragen.
 
 ## API
 
@@ -78,11 +81,16 @@ docker compose up --detach --build
 | `GET /api/v1/databases/{databaseId}` | sämtliche erfassten Parameter und Compliance-Daten einer Datenbank |
 | `GET /api/v1/configuration/overview` | Compliance-Kennzahlen und Bewertung je Server |
 | `GET /api/v1/configuration/checks` | SOLL-/IST-Prüfungen mit Suche, Filtern, Sortierung und Paging |
+| `GET /api/v1/restore-tests/overview` | Abdeckung und Fehlerkategorien der Restoretests im gewählten Zeitraum |
+| `GET /api/v1/restore-tests/databases` | Zeitraumstatus und letzte Restore-/DBCC-Ergebnisse aller Inventardatenbanken |
+| `GET /api/v1/restore-tests/databases/{databaseId}/history` | vollständiger chronologischer Verlauf aller Restore-/DBCC-Tests einer Datenbank |
 | `GET /health/live` | Prozess-Liveness |
 | `GET /health/ready` | Readiness inklusive SQL-Verbindung im SQL-Modus |
 | `GET /openapi/v1.json` | OpenAPI-Beschreibung in der Development-Umgebung |
 
 Listenendpunkte akzeptieren `search`, `environment`, `page`, `pageSize`, `sortBy` und `sortDirection`. Der Serverendpunkt unterstützt zusätzlich `version` und `edition`. Datenbank- und Konfigurationsendpunkt unterstützen außerdem `status`; beim Konfigurationsendpunkt filtert `category` den Servertyp.
+
+Die Restoretest-Endpunkte akzeptieren `period` mit `365`, `730`, `1095`, `1825` oder `all`. Der Zeitraum ändert Kennzahlen, Zeitraumstatus und Restorehäufigkeit, nicht jedoch die Grundgesamtheit der Inventardatenbanken oder die vollständige Historie.
 
 ## Kubernetes
 

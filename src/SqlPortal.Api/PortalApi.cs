@@ -46,6 +46,18 @@ public static class PortalApi
             .WithName("GetConfigurationChecks")
             .WithSummary("Returns filtered and paged desired/actual configuration checks.");
 
+        api.MapGet("/restore-tests/overview", GetRestoreTestOverview)
+            .WithName("GetRestoreTestOverview")
+            .WithSummary("Returns the rolling one-year automatic restore-test coverage.");
+
+        api.MapGet("/restore-tests/databases", GetRestoreTestDatabases)
+            .WithName("GetRestoreTestDatabases")
+            .WithSummary("Returns restore-test coverage and results for inventory databases.");
+
+        api.MapGet("/restore-tests/databases/{databaseId:int}/history", GetRestoreTestHistory)
+            .WithName("GetRestoreTestHistory")
+            .WithSummary("Returns the complete restore-test history for one inventory database.");
+
         return app;
     }
 
@@ -158,6 +170,51 @@ public static class PortalApi
             sortBy,
             sortDirection);
         return Results.Ok(await repository.GetConfigurationChecksAsync(query, cancellationToken));
+    }
+
+    private static async Task<IResult> GetRestoreTestOverview(
+        string? period,
+        IRestoreTestRepository repository,
+        CancellationToken cancellationToken) =>
+        Results.Ok(await repository.GetOverviewAsync(
+            RestoreTestQuery.NormalizePeriod(period),
+            cancellationToken));
+
+    private static async Task<IResult> GetRestoreTestDatabases(
+        string? search,
+        string? status,
+        string? selection,
+        string? period,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        string? sortDirection,
+        IRestoreTestRepository repository,
+        CancellationToken cancellationToken)
+    {
+        var query = RestoreTestQuery.Create(
+            search,
+            status,
+            selection,
+            period,
+            page ?? 1,
+            pageSize ?? 20,
+            sortBy,
+            sortDirection);
+        return Results.Ok(await repository.GetDatabasesAsync(query, cancellationToken));
+    }
+
+    private static async Task<IResult> GetRestoreTestHistory(
+        int databaseId,
+        string? period,
+        IRestoreTestRepository repository,
+        CancellationToken cancellationToken)
+    {
+        var detail = await repository.GetHistoryAsync(
+            databaseId,
+            RestoreTestQuery.NormalizePeriod(period),
+            cancellationToken);
+        return detail is null ? Results.NotFound() : Results.Ok(detail);
     }
 }
 

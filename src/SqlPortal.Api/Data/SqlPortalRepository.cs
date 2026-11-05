@@ -129,7 +129,8 @@ public sealed class SqlPortalRepository : IPortalRepository
                 servers.TotalMemoryGb),
             environments,
             focusServers,
-            alerts);
+            alerts,
+            new SupportLifecycleSummary(0, 0, 0, 0, []));
     }
 
     public async Task<AnalyticsOverview> GetAnalyticsOverviewAsync(

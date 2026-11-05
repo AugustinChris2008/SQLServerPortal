@@ -29,6 +29,39 @@ export function formatDateTime(value: string | null): string {
   }).format(new Date(value));
 }
 
+export function formatDate(value: string | null): string {
+  if (!value) return 'Nicht hinterlegt';
+  return new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' }).format(new Date(value));
+}
+
+export function formatRemainingSupport(value: string | null): string {
+  if (!value) return 'Keine Frist hinterlegt';
+
+  const endDate = new Date(value);
+  if (Number.isNaN(endDate.getTime())) return 'Ungültiges Datum';
+
+  const today = new Date();
+  const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  const differenceDays = Math.round((endUtc - todayUtc) / 86_400_000);
+
+  if (differenceDays === 0) return 'Endet heute';
+
+  const absoluteDays = Math.abs(differenceDays);
+  const years = Math.floor(absoluteDays / 365.2425);
+  const afterYears = absoluteDays - Math.round(years * 365.2425);
+  const months = Math.floor(afterYears / 30.436875);
+  const days = Math.max(0, Math.round(afterYears - months * 30.436875));
+  const parts: string[] = [];
+
+  if (years > 0) parts.push(`${years} ${years === 1 ? 'Jahr' : 'Jahre'}`);
+  if (months > 0 && parts.length < 2) parts.push(`${months} ${months === 1 ? 'Monat' : 'Monate'}`);
+  if (days > 0 && parts.length < 2) parts.push(`${days} ${days === 1 ? 'Tag' : 'Tage'}`);
+
+  const duration = parts.length > 0 ? parts.join(', ') : 'weniger als 1 Tag';
+  return differenceDays > 0 ? `Noch ${duration}` : `Seit ${duration} beendet`;
+}
+
 export function relativeTime(value: string | null): string {
   if (!value) return 'unbekannt';
   const differenceMinutes = Math.round((new Date(value).getTime() - Date.now()) / 60_000);
@@ -48,9 +81,9 @@ export function relativeTime(value: string | null): string {
 
 export function statusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
   const normalized = status.toLowerCase();
-  if (normalized === 'gesund' || normalized === 'konform') return 'success';
-  if (normalized === 'warnung') return 'warning';
-  if (normalized === 'kritisch' || normalized === 'abweichung') return 'danger';
+  if (normalized === 'gesund' || normalized === 'konform' || normalized === 'erfolgreich') return 'success';
+  if (normalized === 'warnung' || normalized === 'übersprungen') return 'warning';
+  if (normalized === 'kritisch' || normalized === 'abweichung' || normalized === 'fehlgeschlagen') return 'danger';
   return 'neutral';
 }
 

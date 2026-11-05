@@ -57,7 +57,22 @@ public sealed record PortalOverview(
     OverviewMetrics Metrics,
     IReadOnlyList<EnvironmentSummary> Environments,
     IReadOnlyList<PortalServer> FocusServers,
-    IReadOnlyList<DatabaseAlert> DatabaseAlerts);
+    IReadOnlyList<DatabaseAlert> DatabaseAlerts,
+    SupportLifecycleSummary SupportLifecycle);
+
+public sealed record SupportLifecycleSummary(
+    int MainstreamSupportServers,
+    int ExtendedSupportServers,
+    int UnsupportedServers,
+    int UnknownServers,
+    IReadOnlyList<SupportLifecycleVersion> Versions);
+
+public sealed record SupportLifecycleVersion(
+    string Version,
+    int ServerCount,
+    DateTime? EndOfMainstreamSupport,
+    DateTime? EndOfExtendedSupport,
+    string Status);
 
 public sealed record OverviewMetrics(
     int TotalServers,
