@@ -12,11 +12,13 @@ public static class PortalDataRegistration
         {
             services.AddScoped<IPortalRepository, ZolPortalRepository>();
             services.AddScoped<IRestoreTestRepository, RestoreTestRepository>();
+            services.AddScoped<IJobRepository, JobRepository>();
         }
         else if (string.Equals(mode, "Demo", StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton<IPortalRepository, DemoPortalRepository>();
             services.AddSingleton<IRestoreTestRepository, DemoRestoreTestRepository>();
+            services.AddSingleton<IJobRepository, DemoJobRepository>();
         }
         else
         {

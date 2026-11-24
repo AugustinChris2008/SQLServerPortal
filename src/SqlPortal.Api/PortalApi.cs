@@ -58,8 +58,51 @@ public static class PortalApi
             .WithName("GetRestoreTestHistory")
             .WithSummary("Returns the complete restore-test history for one inventory database.");
 
+        var jobs = api.MapGroup("/jobs");
+        jobs.MapGet("/servers", GetJobServers)
+            .WithName("GetJobServers")
+            .WithSummary("Returns the latest completed job outcome counts per server.");
+
+        jobs.MapGet("/runs", GetJobRuns)
+            .WithName("GetJobRuns")
+            .WithSummary("Returns filtered job outcomes, optionally including previous runs.");
+
+        jobs.MapGet("/violations", GetJobViolations)
+            .WithName("GetJobViolations")
+            .WithSummary("Returns job monitoring rule violations for the last 24 hours.");
+
         return app;
     }
+
+    private static async Task<IResult> GetJobServers(
+        IJobRepository repository,
+        CancellationToken cancellationToken) =>
+        Results.Ok(await repository.GetServersAsync(cancellationToken));
+
+    private static async Task<IResult> GetJobRuns(
+        string? search,
+        string? server,
+        string? status,
+        bool? history,
+        int? page,
+        int? pageSize,
+        string? sqlInstance,
+        string? jobName,
+        bool? includeMessage,
+        IJobRepository repository,
+        CancellationToken cancellationToken) =>
+        Results.Ok(await repository.GetRunsAsync(
+            JobQuery.Create(search, server, status, history ?? false, page ?? 1, pageSize ?? 20,
+                sqlInstance, jobName, includeMessage ?? true),
+            cancellationToken));
+
+    private static async Task<IResult> GetJobViolations(
+        string? server,
+        IJobRepository repository,
+        CancellationToken cancellationToken) =>
+        Results.Ok(await repository.GetViolationsAsync(
+            string.IsNullOrWhiteSpace(server) ? null : server.Trim(),
+            cancellationToken));
 
     private static async Task<IResult> GetOverview(
         IPortalRepository repository,

@@ -2,7 +2,7 @@
 
 ## Aktive Datenquelle
 
-Der Modus `SqlServer` verbindet sich ausschließlich mit `SQLPortal` und liest aus `[dbo].[v_SQLPortalDataOverview]`, `[dbo].[ComplianceRules]`, `[dbo].[ComplianceResults]`, `[dbo].[ComplianceCurrentValues]` und `[dbo].[SQLServerSupportLifecycle]`. Schreibrechte sind nicht erforderlich. Die feste Zuordnung befindet sich in `ZolPortalRepository`.
+Für Inventar, Konfigurationsprüfungen und Supportstatus liest der Modus `SqlServer` in `SQLPortal` aus `[dbo].[v_SQLPortalDataOverview]`, `[dbo].[ComplianceRules]`, `[dbo].[ComplianceResults]`, `[dbo].[ComplianceCurrentValues]` und `[dbo].[SQLServerSupportLifecycle]`. Schreibrechte sind nicht erforderlich. Die feste Zuordnung befindet sich in `ZolPortalRepository`.
 
 Für automatische Restoretests verwendet die Anwendung eine zweite Read-only-Verbindung zur Datenbank `RestoreTest` und liest `[dbo].[RestoreResults]`. Die Grundgesamtheit bleibt unabhängig vom gewählten Zeitraum immer das aktuelle Datenbankinventar aus `SQLPortal`. Für die Kennzahlen, den Zeitraumstatus und die Restorehäufigkeit kann zwischen 1, 2, 3 und 5 Jahren sowie der gesamten verfügbaren Historie gewählt werden. Eine Datenbank gilt nur dann als abgedeckt, wenn sowohl `RestoreResult` als auch `DbccResult` innerhalb des gewählten Zeitraums den Wert `Success` haben. Fehlgeschlagene, übersprungene und nicht getestete Datenbanken bleiben in der offenen Restmenge. Zusätzlich unterscheidet das Portal zwischen nie, einmal und mehrfach wiederhergestellt; Testläufe oberhalb des ersten Restores werden als Wiederholungsläufe ausgewiesen. Die Detailansicht lädt unabhängig vom Zeitraum die vollständige chronologische Testhistorie und kennzeichnet Einträge innerhalb beziehungsweise außerhalb der Auswahl. Ergebnisse ohne Testzeitpunkt bleiben sichtbar, werden aber keinem zeitlich begrenzten Zeitraum zugerechnet.
 
@@ -20,7 +20,17 @@ Für automatische Restoretests verwendet die Anwendung eine zweite Read-only-Ver
 - Bewertung: `COMPLIANT` wird als `Konform`, `NON_COMPLIANT` als `Abweichung` und nicht auswertbare Zustände als `Nicht ermittelt` angezeigt.
 - Supportstatus: `SQLServerSupportLifecycle` liefert Mainstream- und Extended-Supportende. Produktnamen werden auf die SQL-Server-Versionsfamilie normalisiert; nach Ende des Extended Supports wird eine Version als `Nicht unterstützt` markiert. Nicht zuordenbare Versionen bleiben sichtbar als `Unbekannt`.
 
-Die Readiness-Prüfung referenziert die Inventar-View und alle vier Tabellen und prüft damit Verbindung, Existenz und Leseberechtigung.
+Die Readiness-Prüfung prüft Verbindung, Existenz und Leseberechtigung für die Inventar-View, die vier Inventar- und Konfigurationstabellen sowie die Restoretest-Tabelle.
+
+## SQL-Agent-Jobs
+
+Der Tab „Jobs“ verwendet die vorhandene Verbindung zur Datenbank `SQLPortal`. Der Portal-Login benötigt zusätzlich `SELECT` auf `[dbo].[JobRunHistory]`, `[dbo].[JobMonitoringRules]` und `[dbo].[vw_FailedJobRuns]`. Für die Zuordnung von Umgebung und Servertyp verwendet das Portal die jüngste passende Zeile aus `[dbo].[ComplianceResults]`.
+
+- Die Jobübersicht liest Gesamtergebnisse mit `StepName = '(Job outcome)'` und den Abschlussstatus `Succeeded`, `Failed`, `Canceled` oder `Cancelled`. Je Kombination aus Server, SQL-Instanz und Job zählt der zuletzt gestartete abgeschlossene Lauf für die Serverquote. Gleichnamige Jobs auf unterschiedlichen Instanzen zählen einzeln. Zeitangaben entsprechen der gespeicherten SQL-Server-Ortszeit. Falls `StartDate` fehlt, verwendet das Portal `RunDate`.
+- Die Regelprüfung wertet `EXACT`, `MINIMUM` und `CheckSuccess` im rollierenden 24-Stunden-Fenster anhand der Datenbankzeit aus. `NONE` lässt die Laufanzahl offen. Eine Regel gilt für einen Job auf einer Instanz, für die er bereits in der importierten Historie bekannt ist. Dadurch sind auch null Läufe in den letzten 24 Stunden erkennbar. `ALL` gilt unabhängig von der Klassifikation. Für speziellere Regeln müssen die entsprechenden Felder der Instanz in den Compliance-Daten vorhanden sein.
+- Die vorhandene `vw_JobMonitoring` aggregiert mehrere Instanzen und Jobschritte. Deshalb liest das Portal die Regeln direkt und bewertet sie je Instanz. Die View bleibt in SQL Server verfügbar.
+- Die Serverliste lässt sich nach Jobstatus und Regelabweichungen filtern. Beim Öffnen eines Servers zeigt das Detailfenster Jobstatus, den letzten Lauf je Job und Regelabweichungen. Ein Klick auf den Job öffnet seine vollständige erfasste Historie je SQL-Instanz, absteigend nach Laufbeginn und mit der jeweiligen Agent-Meldung. Bei einer verletzten Regel mit positiver Soll-Laufanzahl und null erfassten Läufen erscheint „Kein Lauf in 24 Std.“ zusätzlich zum Ergebnis des letzten erfassten Laufs.
+- Das Dashboard zeigt bis zu fünf der jüngsten fehlgeschlagenen oder abgebrochenen Läufe. Fehlgeschlagene Läufe kommen aus `vw_FailedJobRuns`, abgebrochene Läufe aus `JobRunHistory`. „Alle anzeigen“ filtert die Serverliste auf Server mit nicht erfolgreichen Läufen in der Historie. Beim Öffnen eines Servers erscheint die gefilterte Historie.
 
 ## Generischer View-Vertrag (derzeit nicht aktiv)
 

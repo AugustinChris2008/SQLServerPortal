@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { portalApi } from './api';
+import { DashboardJobRuns } from './JobsPage';
 import { formatDate, formatDateTime, formatNumber, formatRemainingSupport, relativeTime } from './format';
 import type { PortalOverview, SupportLifecycleSummary } from './types';
 import { EnvironmentTag, ErrorState, Icon, LoadingState, PageTitle } from './ui';
 
-export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | 'databases' | 'configuration') => void }) {
+export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | 'databases' | 'configuration' | 'jobs', queryString?: string) => void }) {
   const [overview, setOverview] = useState<PortalOverview | null>(null);
   const [misconfiguredServers, setMisconfiguredServers] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,6 +73,8 @@ export function DashboardPage({ onNavigate }: { onNavigate: (view: 'servers' | '
         <MetricCard label="Nicht konform" value={misconfiguredServers === null ? '–' : formatNumber(misconfiguredServers)} detail="Server mit Abweichung" icon="settings" tone={misconfiguredServers === null ? 'amber' : misconfiguredServers > 0 ? 'red' : 'green'} onClick={() => onNavigate('configuration')} />
         <MetricCard label="Auffälligkeiten" value={formatNumber(metrics.attentionDatabases)} detail="im letzten Scan" icon="alert" tone={metrics.attentionDatabases > 0 ? 'red' : 'green'} onClick={() => onNavigate('databases')} />
       </section>
+
+      <DashboardJobRuns revision={reloadKey} onOpen={() => onNavigate('jobs', '?history=true&status=not-successful')} />
 
       <section className="dashboard-grid">
         <article className="panel health-panel">

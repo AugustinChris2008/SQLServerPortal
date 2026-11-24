@@ -5,28 +5,27 @@ import { ConfigurationServerPage } from './ConfigurationServerPage';
 import { DatabaseInventoryPage } from './DatabaseInventoryPage';
 import { ServerInventoryPage } from './ServerInventoryPage';
 import { RestoreTestsPage } from './RestoreTestsPage';
+import { JobsPage } from './JobsPage';
 import { Icon } from './ui';
 
-type View = 'dashboard' | 'analytics' | 'servers' | 'databases' | 'configuration' | 'restore-tests';
-
-function viewFromHash(): View {
-  const value = window.location.hash.replace('#/', '');
-  return value === 'analytics' || value === 'servers' || value === 'databases' || value === 'configuration' || value === 'restore-tests' ? value : 'dashboard';
-}
+const views = ['dashboard', 'analytics', 'servers', 'databases', 'configuration', 'restore-tests', 'jobs'] as const;
+type View = typeof views[number];
 
 export function App() {
-  const [view, setView] = useState<View>(viewFromHash);
+  const [hash, setHash] = useState(() => window.location.hash);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [path, query] = hash.replace('#/', '').split('?');
+  const view = views.find((value) => value === path) ?? 'dashboard';
 
   useEffect(() => {
-    const handleHashChange = () => setView(viewFromHash());
+    const handleHashChange = () => setHash(window.location.hash);
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  function navigate(nextView: View) {
-    window.location.hash = `/${nextView}`;
-    setView(nextView);
+  function navigate(nextView: View, queryString = '') {
+    window.location.hash = `/${nextView}${queryString}`;
+    setHash(window.location.hash);
     setSidebarOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -50,6 +49,7 @@ export function App() {
           <NavButton active={view === 'databases'} icon="database" label="Datenbanken" onClick={() => navigate('databases')} />
           <NavButton active={view === 'configuration'} icon="settings" label="Konfiguration" onClick={() => navigate('configuration')} />
           <NavButton active={view === 'restore-tests'} icon="backup" label="Restoretests" onClick={() => navigate('restore-tests')} />
+          <NavButton active={view === 'jobs'} icon="activity" label="Jobs" onClick={() => navigate('jobs')} />
         </nav>
 
         <div className="sidebar__footer">
@@ -71,6 +71,7 @@ export function App() {
           {view === 'databases' && <DatabaseInventoryPage />}
           {view === 'configuration' && <ConfigurationServerPage />}
           {view === 'restore-tests' && <RestoreTestsPage />}
+          {view === 'jobs' && <JobsPage key={hash} initialFilters={new URLSearchParams(query)} />}
         </main>
         <footer className="page-footer"><span>SQL Operations Portal</span><span>Scan-Daten · Keine Liveüberwachung · Nur-Lese-Zugriff</span></footer>
       </div>
@@ -78,7 +79,7 @@ export function App() {
   );
 }
 
-function NavButton({ active, icon, label, onClick }: { active: boolean; icon: 'dashboard' | 'chart' | 'server' | 'database' | 'settings' | 'backup'; label: string; onClick: () => void }) {
+function NavButton({ active, icon, label, onClick }: { active: boolean; icon: 'dashboard' | 'chart' | 'server' | 'database' | 'settings' | 'backup' | 'activity'; label: string; onClick: () => void }) {
   return <button className={`nav-item${active ? ' nav-item--active' : ''}`} onClick={onClick}><Icon name={icon} /><span>{label}</span></button>;
 }
 

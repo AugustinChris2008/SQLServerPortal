@@ -1,3 +1,15 @@
+import type { JobRun } from './types';
+
+const jobStatusLabels: Record<JobRun['status'], string> = {
+  Succeeded: 'Erfolgreich',
+  Failed: 'Fehlgeschlagen',
+  Canceled: 'Abgebrochen',
+};
+
+export function formatJobStatus(status: JobRun['status']): string {
+  return jobStatusLabels[status];
+}
+
 export function formatNumber(value: number, maximumFractionDigits = 0): string {
   return new Intl.NumberFormat('de-DE', { maximumFractionDigits }).format(value);
 }
@@ -82,7 +94,7 @@ export function relativeTime(value: string | null): string {
 export function statusTone(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
   const normalized = status.toLowerCase();
   if (normalized === 'gesund' || normalized === 'konform' || normalized === 'erfolgreich') return 'success';
-  if (normalized === 'warnung' || normalized === 'übersprungen') return 'warning';
+  if (normalized === 'warnung' || normalized === 'übersprungen' || normalized === 'abgebrochen') return 'warning';
   if (normalized === 'kritisch' || normalized === 'abweichung' || normalized === 'fehlgeschlagen') return 'danger';
   return 'neutral';
 }

@@ -7,6 +7,7 @@ Read-only-Webportal für den zentralen Überblick über zeitversetzt erfasste Mi
 - Dashboard mit Bestands-, RAM- und Datenalter-Kennzahlen
 - sofort sichtbarer Microsoft-Supportstatus je eingesetzter SQL-Server-Version
 - wählbare Zeitraumquote automatischer Restore- und DBCC-Tests mit Restorehäufigkeit, Wiederholungsläufen, vollständiger Testhistorie, Fehlerkategorien und Detailansicht
+- SQL-Agent-Jobs mit filterbarer Serverliste, Erfolgsquoten, Historie mit Meldungen je Job und nicht erfolgreichen Läufen im Dashboard
 - filter- und sortierbare Serverübersicht mit installierter RAM-Kapazität
 - filter- und sortierbare Datenbankübersicht
 - Konfigurationsprüfung mit SOLL-/IST-Vergleich, Compliance-Kennzahlen und Serverbewertung
@@ -84,6 +85,9 @@ docker compose up --detach --build
 | `GET /api/v1/restore-tests/overview` | Abdeckung und Fehlerkategorien der Restoretests im gewählten Zeitraum |
 | `GET /api/v1/restore-tests/databases` | Zeitraumstatus und letzte Restore-/DBCC-Ergebnisse aller Inventardatenbanken |
 | `GET /api/v1/restore-tests/databases/{databaseId}/history` | vollständiger chronologischer Verlauf aller Restore-/DBCC-Tests einer Datenbank |
+| `GET /api/v1/jobs/servers` | Anzahl und Erfolgsquote der Jobs je Server |
+| `GET /api/v1/jobs/runs` | letzte Jobläufe oder vollständige Historie mit Suche, Ergebnis- und Serverfilter |
+| `GET /api/v1/jobs/violations` | verletzte Jobregeln je SQL-Instanz im rollierenden 24-Stunden-Fenster, optional für einen `server` |
 | `GET /health/live` | Prozess-Liveness |
 | `GET /health/ready` | Readiness inklusive SQL-Verbindung im SQL-Modus |
 | `GET /openapi/v1.json` | OpenAPI-Beschreibung in der Development-Umgebung |
@@ -91,6 +95,8 @@ docker compose up --detach --build
 Listenendpunkte akzeptieren `search`, `environment`, `page`, `pageSize`, `sortBy` und `sortDirection`. Der Serverendpunkt unterstützt zusätzlich `version` und `edition`. Datenbank- und Konfigurationsendpunkt unterstützen außerdem `status`; beim Konfigurationsendpunkt filtert `category` den Servertyp.
 
 Die Restoretest-Endpunkte akzeptieren `period` mit `365`, `730`, `1095`, `1825` oder `all`. Der Zeitraum ändert Kennzahlen, Zeitraumstatus und Restorehäufigkeit, nicht jedoch die Grundgesamtheit der Inventardatenbanken oder die vollständige Historie.
+
+Die Jobliste akzeptiert `search`, `server`, `sqlInstance` und `jobName`, `status` (`successful`, `not-successful`), `history` (`true` für alle Läufe), `page` und `pageSize`. Mit `includeMessage=false` werden die Agent-Meldungen weggelassen. Der Klick auf einen Job lädt die Historie über den exakten Server-, Instanz- und Jobfilter. Die SQL-Quellen und die benötigten Leseberechtigungen stehen im [SQL-Vertrag](database/README.md#sql-agent-jobs).
 
 ## Kubernetes
 
@@ -106,7 +112,7 @@ kubectl apply -k deploy/kubernetes/base
 
 - Unternehmens-Login über OIDC/Entra ID; dafür werden Tenant, Client-ID und DBA-Gruppe benötigt.
 - fachliche Ausgestaltung der einzelnen Tabs über die heute verfügbare Inventartabelle hinaus.
-- Backup-, SQL-Agent- und Hochverfügbarkeitsmodule als nächste fachliche Ausbaustufen.
+- Backup- und Hochverfügbarkeitsmodule als nächste fachliche Ausbaustufen.
 
 Vor einem zentralen Rollout muss die Authentifizierung aktiviert werden. Die jetzige Version ist für lokale Entwicklung beziehungsweise ein bereits vollständig abgeschottetes Testnetz gedacht.
 

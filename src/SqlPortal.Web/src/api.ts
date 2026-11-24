@@ -3,6 +3,10 @@ import type {
   ConfigurationCheck,
   ConfigurationOverview,
   DatabaseDetail,
+  JobRuleViolation,
+  JobRun,
+  JobRunQuery,
+  JobServerSummary,
   ListQuery,
   PagedResult,
   PortalDatabase,
@@ -15,7 +19,7 @@ import type {
   ServerFilterOptions,
 } from './types';
 
-function toQueryString(query: ListQuery): string {
+function toQueryString(query: ListQuery | JobRunQuery): string {
   const search = new URLSearchParams();
   Object.entries(query).forEach(([key, value]) => {
     if (value !== undefined && value !== '') {
@@ -40,6 +44,12 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 export const portalApi = {
+  jobServers: (signal?: AbortSignal) =>
+    getJson<JobServerSummary[]>('/api/v1/jobs/servers', signal),
+  jobRuns: (query: JobRunQuery, signal?: AbortSignal) =>
+    getJson<PagedResult<JobRun>>(`/api/v1/jobs/runs${toQueryString(query)}`, signal),
+  jobViolations: (server?: string, signal?: AbortSignal) =>
+    getJson<JobRuleViolation[]>(`/api/v1/jobs/violations${toQueryString({ server })}`, signal),
   overview: (signal?: AbortSignal) =>
     getJson<PortalOverview>('/api/v1/overview', signal),
   analyticsOverview: (signal?: AbortSignal) =>

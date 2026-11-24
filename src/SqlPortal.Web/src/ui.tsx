@@ -65,8 +65,7 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   );
 }
 
-export function StatusPill({ status }: { status: string }) {
-  const tone = statusTone(status);
+export function StatusPill({ status, tone = statusTone(status) }: { status: string; tone?: ReturnType<typeof statusTone> }) {
   return <span className={`status-pill status-pill--${tone}`}><span />{status}</span>;
 }
 

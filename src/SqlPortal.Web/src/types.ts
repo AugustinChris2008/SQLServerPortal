@@ -268,6 +268,51 @@ export interface RestoreTestHistoryDetail {
   history: RestoreTestHistoryEntry[];
 }
 
+export interface JobServerSummary {
+  serverName: string;
+  totalJobs: number;
+  successfulJobs: number;
+  hasUnsuccessfulHistory: boolean;
+}
+
+export interface JobRun {
+  serverName: string;
+  sqlInstance: string;
+  jobName: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  duration: string | null;
+  status: 'Succeeded' | 'Failed' | 'Canceled';
+  message: string | null;
+}
+
+export interface JobRuleViolation {
+  serverName: string;
+  sqlInstance: string;
+  jobName: string;
+  environment: string | null;
+  serverType: string | null;
+  runCountCheckType: string;
+  expectedRuns24h: number | null;
+  actualRuns: number;
+  unsuccessfulRuns: number;
+  runCountViolated: boolean;
+  successViolated: boolean;
+  description: string | null;
+}
+
+export interface JobRunQuery {
+  search?: string;
+  server?: string;
+  sqlInstance?: string;
+  jobName?: string;
+  includeMessage?: boolean;
+  status?: string;
+  history?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
 export interface PagedResult<T> {
   items: T[];
   page: number;
