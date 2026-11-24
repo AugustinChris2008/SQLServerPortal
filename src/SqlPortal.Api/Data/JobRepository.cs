@@ -55,22 +55,87 @@ public sealed class JobRepository(IConfiguration configuration) : IJobRepository
     private readonly string _connectionString = configuration.GetConnectionString("PortalDatabase")
         ?? throw new InvalidOperationException("ConnectionStrings:PortalDatabase is required in SqlServer mode.");
 
-    public async Task<IReadOnlyList<JobServerSummary>> GetServersAsync(int? historyDays, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<JobServerSummary>> GetServersAsync(
+        int? historyDays, bool includeInactive, CancellationToken cancellationToken)
     {
-        var sql = DatabaseClock + JobOutcomesCte + HistoryWindowCte + LatestOutcomesCte + """
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
 
-            SELECT ServerName,
-                TotalJobs = COUNT(CASE WHEN RunRank = 1 THEN 1 END),
-                SuccessfulJobs = COUNT(CASE WHEN RunRank = 1 AND Status = N'Succeeded' THEN 1 END),
-                HasUnsuccessfulHistory = CAST(MAX(CASE WHEN Status <> N'Succeeded' THEN 1 ELSE 0 END) AS bit)
-            FROM RankedOutcomes
-            GROUP BY ServerName
+        // The inventory can expose the server type as a label or as a clustering flag.
+        var serverTypeColumn = await connection.QueryFirstOrDefaultAsync<string>(new CommandDefinition(
+            """
+            SELECT TOP (1) QUOTENAME(columnInfo.name)
+            FROM sys.columns AS columnInfo
+            CROSS APPLY (SELECT NormalizedName = LOWER(REPLACE(columnInfo.name, N'_', N''))) AS columnName
+            WHERE columnInfo.object_id = OBJECT_ID(N'dbo.v_SQLPortalDataOverview', N'V')
+              AND columnName.NormalizedName IN (N'servertype', N'sqlserverservertype', N'isclustered',
+                  N'sqlserverisclustered', N'clustered', N'sqlserverclustered')
+            ORDER BY CASE WHEN columnName.NormalizedName IN (N'servertype', N'sqlserverservertype') THEN 0 ELSE 1 END,
+                columnInfo.column_id;
+            """,
+            cancellationToken: cancellationToken));
+        var serverType = serverTypeColumn is null
+            ? "CAST(NULL AS nvarchar(50))"
+            : $"UPPER(TRIM(CONVERT(nvarchar(50), source.{serverTypeColumn})))";
+
+        var sql = DatabaseClock + JobOutcomesCte + HistoryWindowCte + LatestOutcomesCte + $$"""
+
+            , JobCounts AS
+            (
+                SELECT ServerName,
+                    TotalJobs = COUNT(CASE WHEN RunRank = 1 THEN 1 END),
+                    SuccessfulJobs = COUNT(CASE WHEN RunRank = 1 AND Status = N'Succeeded' THEN 1 END),
+                    HasUnsuccessfulHistory = CAST(MAX(CASE WHEN Status <> N'Succeeded' THEN 1 ELSE 0 END) AS bit)
+                FROM RankedOutcomes
+                GROUP BY ServerName
+            ), HistoricalServers AS
+            (
+                SELECT DISTINCT ServerName FROM Outcomes WHERE @IncludeInactive = 1
+            ), InventoryScans AS
+            (
+                SELECT serverNames.ServerName, metadata.Environment, metadata.ServerType, source.scan_date,
+                    ScanRank = ROW_NUMBER() OVER (PARTITION BY serverNames.ServerName
+                        ORDER BY source.scan_date DESC, metadata.Environment DESC, metadata.ServerType DESC)
+                FROM [dbo].[v_SQLPortalDataOverview] AS source
+                CROSS APPLY (SELECT SqlInstance = TRIM(source.sqlserverinstance)) AS instance
+                CROSS APPLY (
+                    SELECT HostName = UPPER(TRIM(source.hostname)),
+                        InstanceHost = UPPER(LEFT(instance.SqlInstance, CHARINDEX(N'\', instance.SqlInstance + N'\') - 1))
+                ) AS inventoryHost
+                CROSS APPLY (VALUES (inventoryHost.HostName),
+                    (NULLIF(inventoryHost.InstanceHost, inventoryHost.HostName))) AS serverNames(ServerName)
+                CROSS APPLY (SELECT Description = COALESCE(source.description, N''), TypeValue = {{serverType}}) AS inventory
+                CROSS APPLY (SELECT FirstHash = CHARINDEX(N'#', inventory.Description)) AS marker
+                CROSS APPLY (SELECT SecondHash = CHARINDEX(N'#', inventory.Description, marker.FirstHash + 1)) AS boundary
+                CROSS APPLY (
+                    SELECT Environment = CASE WHEN marker.FirstHash > 0 AND boundary.SecondHash > marker.FirstHash
+                            THEN NULLIF(UPPER(TRIM(SUBSTRING(inventory.Description, marker.FirstHash + 1,
+                                boundary.SecondHash - marker.FirstHash - 1))), N'') END,
+                        ServerType = CASE
+                            WHEN inventory.TypeValue IN (N'CLUSTER', N'CLUSTERED', N'1', N'TRUE') THEN N'Cluster'
+                            WHEN inventory.TypeValue IN (N'STANDALONE', N'0', N'FALSE') THEN N'Standalone'
+                            WHEN UPPER(inventory.Description) LIKE N'%SQL CLUSTER%' THEN N'Cluster'
+                            WHEN UPPER(inventory.Description) LIKE N'%STANDALONE%' THEN N'Standalone'
+                        END
+                ) AS metadata
+                WHERE serverNames.ServerName <> N''
+            )
+            SELECT ServerName = COALESCE(counts.ServerName, historical.ServerName),
+                TotalJobs = COALESCE(counts.TotalJobs, 0),
+                SuccessfulJobs = COALESCE(counts.SuccessfulJobs, 0),
+                HasUnsuccessfulHistory = COALESCE(counts.HasUnsuccessfulHistory, CAST(0 AS bit)),
+                scan.Environment, scan.ServerType,
+                LastScanAtUtc = SWITCHOFFSET(scan.scan_date AT TIME ZONE 'Central European Standard Time', '+00:00')
+            FROM JobCounts AS counts
+            FULL OUTER JOIN HistoricalServers AS historical ON historical.ServerName = counts.ServerName
+            LEFT JOIN InventoryScans AS scan
+                ON scan.ServerName = COALESCE(counts.ServerName, historical.ServerName) AND scan.ScanRank = 1
             ORDER BY ServerName;
             """;
 
-        await using var connection = new SqlConnection(_connectionString);
         return (await connection.QueryAsync<JobServerSummary>(
-            new CommandDefinition(sql, new { HistoryDays = historyDays }, cancellationToken: cancellationToken))).AsList();
+            new CommandDefinition(sql, new { HistoryDays = historyDays, IncludeInactive = includeInactive },
+                cancellationToken: cancellationToken))).AsList();
     }
 
     public async Task<PagedResult<JobRun>> GetRunsAsync(JobQuery query, CancellationToken cancellationToken)

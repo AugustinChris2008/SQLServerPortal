@@ -19,7 +19,7 @@ import type {
   ServerFilterOptions,
 } from './types';
 
-function toQueryString(query: ListQuery | JobRunQuery): string {
+function toQueryString(query: ListQuery | JobRunQuery | { historyDays: number; includeInactive?: boolean }): string {
   const search = new URLSearchParams();
   Object.entries(query).forEach(([key, value]) => {
     if (value !== undefined && value !== '') {
@@ -44,8 +44,8 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 export const portalApi = {
-  jobServers: (historyDays: number, signal?: AbortSignal) =>
-    getJson<JobServerSummary[]>(`/api/v1/jobs/servers${toQueryString({ historyDays })}`, signal),
+  jobServers: (historyDays: number, includeInactive: boolean, signal?: AbortSignal) =>
+    getJson<JobServerSummary[]>(`/api/v1/jobs/servers${toQueryString({ historyDays, includeInactive: includeInactive || undefined })}`, signal),
   jobRuns: (query: JobRunQuery, signal?: AbortSignal) =>
     getJson<PagedResult<JobRun>>(`/api/v1/jobs/runs${toQueryString(query)}`, signal),
   jobMonitoring: (server: string, signal?: AbortSignal) =>

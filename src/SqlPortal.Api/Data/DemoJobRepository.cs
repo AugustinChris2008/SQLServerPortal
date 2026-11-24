@@ -4,17 +4,31 @@ namespace SqlPortal.Api.Data;
 
 public sealed class DemoJobRepository(TimeProvider timeProvider) : IJobRepository
 {
-    public Task<IReadOnlyList<JobServerSummary>> GetServersAsync(int? historyDays, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<JobServerSummary>> GetServersAsync(
+        int? historyDays, bool includeInactive, CancellationToken cancellationToken)
     {
-        var now = timeProvider.GetLocalNow().DateTime;
-        IReadOnlyList<JobServerSummary> items = FilterByHistoryDays(CreateRuns(now), now, historyDays)
-            .GroupBy(run => run.ServerName, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(group =>
+        var now = timeProvider.GetLocalNow();
+        var runs = CreateRuns(now.DateTime);
+        var periodRuns = FilterByHistoryDays(runs, now.DateTime, historyDays);
+        var periodByServer = periodRuns.ToLookup(run => run.ServerName, StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<JobServerSummary> items = (includeInactive ? runs : periodRuns)
+            .Select(run => run.ServerName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(serverName => serverName, StringComparer.OrdinalIgnoreCase)
+            .Select(serverName =>
             {
-                var latest = LatestRuns(group).ToArray();
-                return new JobServerSummary(group.Key, latest.Length, latest.Count(IsSuccessful),
-                    group.Any(run => !IsSuccessful(run)));
+                var serverRuns = periodByServer[serverName];
+                var latest = LatestRuns(serverRuns).ToArray();
+                (string? Environment, string? ServerType, DateTimeOffset? LastScan) inventory = serverName switch
+                {
+                    "DEZANT101V" => ("PROD", "Cluster", now.AddMinutes(-45)),
+                    "DEZSQL204V" => ("CONS", "Standalone", now.AddHours(-2)),
+                    "DEZSQL207V" => ("TEST", "Standalone", now.AddHours(-4)),
+                    _ => (null, null, null)
+                };
+                return new JobServerSummary(serverName, latest.Length, latest.Count(IsSuccessful),
+                    serverRuns.Any(run => !IsSuccessful(run)), inventory.Environment, inventory.ServerType,
+                    inventory.LastScan?.ToUniversalTime());
             })
             .ToArray();
         return Task.FromResult(items);

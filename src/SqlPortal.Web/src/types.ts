@@ -273,6 +273,9 @@ export interface JobServerSummary {
   totalJobs: number;
   successfulJobs: number;
   hasUnsuccessfulHistory: boolean;
+  environment: string | null;
+  serverType: string | null;
+  lastScanAtUtc: string | null;
 }
 
 export interface JobIdentity {

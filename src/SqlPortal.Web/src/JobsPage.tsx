@@ -4,9 +4,11 @@ import { formatDateTime, formatJobStatus, formatNumber } from './format';
 import { useJobData } from './hooks';
 import { JobServerDialog } from './JobServerDialog';
 import type { JobRun, JobServerSummary } from './types';
-import { ErrorState, Icon, LoadingState, PageTitle, Pagination, SearchInput, StatusPill } from './ui';
+import { EnvironmentTag, ErrorState, Icon, LoadingState, PageTitle, Pagination, SearchInput, StatusPill } from './ui';
 
 const serverPageSize = 15;
+const unknownEnvironment = 'Nicht klassifiziert';
+const unknownServerType = 'Nicht ermittelt';
 
 export function JobsPage({ initialFilters }: { initialFilters: URLSearchParams }) {
   const requestedStatus = initialFilters.get('status');
@@ -16,26 +18,35 @@ export function JobsPage({ initialFilters }: { initialFilters: URLSearchParams }
   const [evaluation, setEvaluation] = useState(
     initialStatus === 'not-successful' && initialHistory ? 'history' : initialStatus,
   );
+  const [environment, setEnvironment] = useState('');
+  const [serverType, setServerType] = useState('');
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
   const [historyDays, setHistoryDays] = useState(7);
   const [selectedServer, setSelectedServer] = useState<JobServerSummary | null>(null);
-  const fetchServers = useCallback((signal: AbortSignal) => portalApi.jobServers(historyDays, signal), [historyDays]);
+  const showRuleViolations = evaluation === 'rules';
+  const fetchServers = useCallback(
+    (signal: AbortSignal) => portalApi.jobServers(historyDays, showRuleViolations, signal),
+    [historyDays, showRuleViolations],
+  );
   const servers = useJobData(fetchServers, revision);
-  const violations = useJobData(evaluation === 'rules' ? fetchAllViolations : null, revision);
+  const violations = useJobData(showRuleViolations ? fetchAllViolations : null, revision);
   const refresh = () => setRevision((value) => value + 1);
 
   const allServers = servers.data ?? [];
   const ruleServers = new Set(violations.data?.map((rule) => rule.serverName));
   const normalizedSearch = search.trim().toLocaleLowerCase();
-  const knownServers = new Set(allServers.map((server) => server.serverName));
-  const candidateServers = evaluation === 'rules'
-    ? [...allServers, ...Array.from(ruleServers).filter((serverName) => !knownServers.has(serverName))
-      .map((serverName) => ({ serverName, totalJobs: 0, successfulJobs: 0, hasUnsuccessfulHistory: false }))]
-    : allServers;
+  const candidateServers = allServers.filter((server) =>
+    server.totalJobs > 0 || (showRuleViolations && ruleServers.has(server.serverName)));
+  const environments = [...new Set([environment, ...candidateServers.map((server) => server.environment ?? unknownEnvironment)])]
+    .filter(Boolean).sort();
+  const serverTypes = [...new Set([serverType, ...candidateServers.map((server) => server.serverType ?? unknownServerType)])]
+    .filter(Boolean).sort();
   const filtered = candidateServers.filter((server) => {
     if (!server.serverName.toLocaleLowerCase().includes(normalizedSearch)) return false;
-    if (evaluation === 'rules') return ruleServers.has(server.serverName);
+    if (environment && (server.environment ?? unknownEnvironment) !== environment) return false;
+    if (serverType && (server.serverType ?? unknownServerType) !== serverType) return false;
+    if (showRuleViolations) return ruleServers.has(server.serverName);
     if (evaluation === 'history') return server.hasUnsuccessfulHistory;
     if (evaluation === 'not-successful') return server.successfulJobs < server.totalJobs;
     if (evaluation === 'successful') return server.successfulJobs === server.totalJobs;
@@ -44,8 +55,8 @@ export function JobsPage({ initialFilters }: { initialFilters: URLSearchParams }
   const totalPages = Math.max(1, Math.ceil(filtered.length / serverPageSize));
   const currentPage = Math.min(page, totalPages);
   const serverOffset = (currentPage - 1) * serverPageSize;
-  const loading = servers.loading || (evaluation === 'rules' && violations.loading);
-  const failed = servers.failed || (evaluation === 'rules' && violations.failed);
+  const loading = servers.loading || (showRuleViolations && violations.loading);
+  const failed = servers.failed || (showRuleViolations && violations.failed);
 
   return (
     <>
@@ -82,6 +93,20 @@ export function JobsPage({ initialFilters }: { initialFilters: URLSearchParams }
               <option value="history">Nicht erfolgreiche Läufe in der Historie</option>
             </select>
           </label>
+          <label className="select-field">
+            <span id="jobs-environment-label">Umgebung</span>
+            <select aria-labelledby="jobs-environment-label" value={environment} onChange={(event) => { setEnvironment(event.target.value); setPage(1); }}>
+              <option value="">Alle Umgebungen</option>
+              {environments.map((value) => <option key={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="select-field">
+            <span id="jobs-server-type-label">Servertyp</span>
+            <select aria-labelledby="jobs-server-type-label" value={serverType} onChange={(event) => { setServerType(event.target.value); setPage(1); }}>
+              <option value="">Alle Servertypen</option>
+              {serverTypes.map((value) => <option key={value}>{value}</option>)}
+            </select>
+          </label>
         </div>
         {loading ? <LoadingState label="Jobstatus der Server wird geladen" /> :
           failed ? <ErrorState retry={refresh} /> :
@@ -100,7 +125,7 @@ export function JobsPage({ initialFilters }: { initialFilters: URLSearchParams }
         <JobServerDialog
           server={selectedServer}
           historyDays={historyDays}
-          initialStatus={evaluation === 'rules' ? 'rules' : ''}
+          initialStatus={showRuleViolations ? 'rules' : ''}
           onClose={() => setSelectedServer(null)}
         />
       )}
@@ -113,13 +138,23 @@ function fetchAllViolations(signal: AbortSignal) {
 }
 
 function JobServerRow({ server, onOpen }: { server: JobServerSummary; onOpen: () => void }) {
-  const { serverName, successfulJobs, totalJobs } = server;
+  const { serverName, successfulJobs, totalJobs, environment, serverType, lastScanAtUtc } = server;
   const unsuccessfulJobs = totalJobs - successfulJobs;
   const percent = totalJobs > 0 ? successfulJobs * 100 / totalJobs : 0;
 
   return (
     <button type="button" className="server-compliance-row server-compliance-row--expanded jobs-server-row" aria-haspopup="dialog" onClick={onOpen}>
-      <div><strong>{serverName}</strong><span>{formatNumber(totalJobs)} {totalJobs === 1 ? 'Job' : 'Jobs'}</span></div>
+      <div>
+        <div className="jobs-server-name">
+          <strong>{serverName}</strong>
+          <EnvironmentTag value={environment ?? unknownEnvironment} />
+          <small>{serverType ?? 'Servertyp nicht ermittelt'}</small>
+        </div>
+        <span>
+          {formatNumber(totalJobs)} {totalJobs === 1 ? 'Job' : 'Jobs'} · Letzter Scan{' '}
+          {lastScanAtUtc ? <time dateTime={lastScanAtUtc}>{formatDateTime(lastScanAtUtc)}</time> : 'nicht verfügbar'}
+        </span>
+      </div>
       {totalJobs > 0 ? (
         <>
           <div className="server-compliance-score">

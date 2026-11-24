@@ -14,7 +14,10 @@ public sealed record JobServerSummary(
     string ServerName,
     int TotalJobs,
     int SuccessfulJobs,
-    bool HasUnsuccessfulHistory);
+    bool HasUnsuccessfulHistory,
+    string? Environment,
+    string? ServerType,
+    DateTimeOffset? LastScanAtUtc);
 
 public sealed record JobMonitoringResult(
     string ServerName,

@@ -24,7 +24,9 @@ Die Readiness-Prüfung prüft Verbindung, Existenz und Leseberechtigung für die
 
 ## SQL-Agent-Jobs
 
-Der Tab „Jobs“ verwendet die vorhandene Verbindung zur Datenbank `SQLPortal`. Für Jobdaten benötigt der Portal-Login `SELECT` auf `[dbo].[JobRunHistory]` und `[dbo].[JobMonitoringRules]`.
+Der Tab „Jobs“ verwendet die vorhandene Verbindung zur Datenbank `SQLPortal`. Der Portal-Login benötigt `SELECT` auf `[dbo].[JobRunHistory]`, `[dbo].[JobMonitoringRules]` und `[dbo].[v_SQLPortalDataOverview]`.
+
+- Die Jobübersicht verwendet den jüngsten passenden Inventarscan je Server. Umgebung und Servertyp stehen neben dem Servernamen und sind filterbar. Das Scandatum entspricht `scan_date` aus dem Inventar und ist unabhängig vom gewählten Zeitraum der Jobhistorie.
 
 - Die Jobhistorie verwendet Gesamtergebnisse mit `StepName = '(Job outcome)'` und dem Abschlussstatus `Succeeded`, `Failed`, `Canceled` oder `Cancelled`. Zeitangaben entsprechen der gespeicherten SQL-Server-Ortszeit. Falls `StartDate` fehlt, verwendet das Portal `RunDate`.
 - Die API wertet jede passende Regel je SQL-Instanz anhand der Datenbankzeit und der Regelspalte `MonitoringWindowHours` aus. `EXACT` und `MINIMUM` vergleichen die Laufanzahl mit `ExpectedRuns`. `NONE` deaktiviert diese Prüfung. Eine aktivierte Erfolgsprüfung schlägt bei mindestens einem Lauf mit dem Status `Failed` fehl. Abgebrochene Läufe zählen zur Laufanzahl.

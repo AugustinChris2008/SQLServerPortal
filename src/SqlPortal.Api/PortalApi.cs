@@ -61,7 +61,7 @@ public static class PortalApi
         var jobs = api.MapGroup("/jobs");
         jobs.MapGet("/servers", GetJobServers)
             .WithName("GetJobServers")
-            .WithSummary("Returns the latest completed job outcome counts per server in the requested history period.");
+            .WithSummary("Returns job outcome counts in the requested history period and inventory metadata per server.");
 
         jobs.MapGet("/runs", GetJobRuns)
             .WithName("GetJobRuns")
@@ -80,10 +80,11 @@ public static class PortalApi
 
     private static async Task<IResult> GetJobServers(
         int? historyDays,
+        bool? includeInactive,
         IJobRepository repository,
         CancellationToken cancellationToken) =>
         JobQuery.IsValidHistoryDays(historyDays)
-            ? Results.Ok(await repository.GetServersAsync(historyDays, cancellationToken))
+            ? Results.Ok(await repository.GetServersAsync(historyDays, includeInactive ?? false, cancellationToken))
             : InvalidJobHistoryDays();
 
     private static async Task<IResult> GetJobRuns(
