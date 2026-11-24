@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { portalApi } from './api';
 import { formatDateTime, formatJobStatus, formatNumber } from './format';
 import { useJobData } from './hooks';
@@ -18,22 +18,29 @@ export function JobsPage({ initialFilters }: { initialFilters: URLSearchParams }
   );
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
+  const [historyDays, setHistoryDays] = useState(7);
   const [selectedServer, setSelectedServer] = useState<JobServerSummary | null>(null);
-  const servers = useJobData(portalApi.jobServers, revision);
+  const fetchServers = useCallback((signal: AbortSignal) => portalApi.jobServers(historyDays, signal), [historyDays]);
+  const servers = useJobData(fetchServers, revision);
   const violations = useJobData(evaluation === 'rules' ? fetchAllViolations : null, revision);
   const refresh = () => setRevision((value) => value + 1);
 
   const allServers = servers.data ?? [];
   const ruleServers = new Set(violations.data?.map((rule) => rule.serverName));
   const normalizedSearch = search.trim().toLocaleLowerCase();
-  const filtered = allServers.filter((server) => {
+  const knownServers = new Set(allServers.map((server) => server.serverName));
+  const candidateServers = evaluation === 'rules'
+    ? [...allServers, ...Array.from(ruleServers).filter((serverName) => !knownServers.has(serverName))
+      .map((serverName) => ({ serverName, totalJobs: 0, successfulJobs: 0, hasUnsuccessfulHistory: false }))]
+    : allServers;
+  const filtered = candidateServers.filter((server) => {
     if (!server.serverName.toLocaleLowerCase().includes(normalizedSearch)) return false;
     if (evaluation === 'rules') return ruleServers.has(server.serverName);
     if (evaluation === 'history') return server.hasUnsuccessfulHistory;
     if (evaluation === 'not-successful') return server.successfulJobs < server.totalJobs;
     if (evaluation === 'successful') return server.successfulJobs === server.totalJobs;
     return true;
-  });
+  }).sort((left, right) => left.serverName.localeCompare(right.serverName));
   const totalPages = Math.max(1, Math.ceil(filtered.length / serverPageSize));
   const currentPage = Math.min(page, totalPages);
   const serverOffset = (currentPage - 1) * serverPageSize;
@@ -50,11 +57,21 @@ export function JobsPage({ initialFilters }: { initialFilters: URLSearchParams }
       />
       <section className="panel jobs-panel" aria-labelledby="job-server-summaries">
         <header className="panel__header">
-          <div><h2 id="job-server-summaries">Jobstatus pro Server</h2><p>Die Quote basiert auf dem letzten abgeschlossenen Lauf je Job und SQL-Instanz.</p></div>
-          {!loading && !failed && <span className="summary-count jobs-count">{formatNumber(filtered.length)}{filtered.length !== allServers.length && ` von ${formatNumber(allServers.length)}`} Server</span>}
+          <div><h2 id="job-server-summaries">Jobstatus pro Server</h2><p>Die Quote basiert auf dem letzten abgeschlossenen Lauf je Job und SQL-Instanz im gewählten Zeitraum.</p></div>
+          {!loading && !failed && <span className="summary-count jobs-count">{formatNumber(filtered.length)}{filtered.length !== candidateServers.length && ` von ${formatNumber(candidateServers.length)}`} Server</span>}
         </header>
         <div className="filter-bar jobs-filter-bar">
           <SearchInput value={search} placeholder="Server suchen …" onChange={(value) => { setSearch(value); setPage(1); }} />
+          <label className="select-field">
+            <span>Historienzeitraum</span>
+            <select value={historyDays} onChange={(event) => { setHistoryDays(Number(event.target.value)); setPage(1); }}>
+              <option value={1}>Letzte 24 Stunden</option>
+              <option value={3}>Letzte 3 Tage</option>
+              <option value={7}>Letzte 7 Tage</option>
+              <option value={30}>Letzte 30 Tage</option>
+              <option value={90}>Letzte 90 Tage</option>
+            </select>
+          </label>
           <label className="select-field">
             <span id="jobs-server-status-label">Serverstatus</span>
             <select aria-labelledby="jobs-server-status-label" value={evaluation} onChange={(event) => { setEvaluation(event.target.value); setPage(1); }}>
@@ -82,8 +99,8 @@ export function JobsPage({ initialFilters }: { initialFilters: URLSearchParams }
       {selectedServer && (
         <JobServerDialog
           server={selectedServer}
-          initialHistory={evaluation === 'history'}
-          initialStatus={evaluation === 'history' ? 'not-successful' : evaluation === 'rules' ? 'rules' : ''}
+          historyDays={historyDays}
+          initialStatus={evaluation === 'rules' ? 'rules' : ''}
           onClose={() => setSelectedServer(null)}
         />
       )}
@@ -98,19 +115,23 @@ function fetchAllViolations(signal: AbortSignal) {
 function JobServerRow({ server, onOpen }: { server: JobServerSummary; onOpen: () => void }) {
   const { serverName, successfulJobs, totalJobs } = server;
   const unsuccessfulJobs = totalJobs - successfulJobs;
-  const percent = successfulJobs * 100 / totalJobs;
+  const percent = totalJobs > 0 ? successfulJobs * 100 / totalJobs : 0;
 
   return (
     <button type="button" className="server-compliance-row server-compliance-row--expanded jobs-server-row" aria-haspopup="dialog" onClick={onOpen}>
       <div><strong>{serverName}</strong><span>{formatNumber(totalJobs)} {totalJobs === 1 ? 'Job' : 'Jobs'}</span></div>
-      <div className="server-compliance-score">
-        <span><b>{formatNumber(percent, 1)} %</b> erfolgreich</span>
-        <progress className="jobs-success-bar" max={100} value={percent} aria-label={`Erfolgsquote für ${serverName}`} />
-      </div>
-      <div className="server-compliance-counts">
-        <span>{formatNumber(successfulJobs)} erfolgreich</span>
-        <span className={unsuccessfulJobs ? 'server-compliance-counts--danger' : ''}>{formatNumber(unsuccessfulJobs)} nicht erfolgreich · {formatNumber(100 - percent, 1)} %</span>
-      </div>
+      {totalJobs > 0 ? (
+        <>
+          <div className="server-compliance-score">
+            <span><b>{formatNumber(percent, 1)} %</b> erfolgreich</span>
+            <progress className="jobs-success-bar" max={100} value={percent} aria-label={`Erfolgsquote für ${serverName}`} />
+          </div>
+          <div className="server-compliance-counts">
+            <span>{formatNumber(successfulJobs)} erfolgreich</span>
+            <span className={unsuccessfulJobs ? 'server-compliance-counts--danger' : ''}>{formatNumber(unsuccessfulJobs)} nicht erfolgreich · {formatNumber(100 - percent, 1)} %</span>
+          </div>
+        </>
+      ) : <div className="server-compliance-counts">Keine Läufe im Zeitraum</div>}
       <Icon name="chevron-right" size={17} />
     </button>
   );

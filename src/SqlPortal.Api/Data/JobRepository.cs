@@ -6,13 +6,14 @@ namespace SqlPortal.Api.Data;
 
 public sealed class JobRepository(IConfiguration configuration) : IJobRepository
 {
-    private const string Columns = "ComputerName, InstanceName, SqlInstance, Job, StepName, RunDate, StartDate, EndDate, Duration, Status, Message";
-    private const string HistorySource = "SELECT " + Columns + " FROM [dbo].[JobRunHistory]";
-
-    // The failed-run view contains job steps as well as overall outcomes.
-    private const string UnsuccessfulHistorySource =
-        "SELECT " + Columns + " FROM [dbo].[vw_FailedJobRuns] UNION ALL " +
-        HistorySource + " WHERE UPPER(TRIM(Status)) IN (N'CANCELED', N'CANCELLED')";
+    private const string HistoryWindowCte = """
+        , PeriodOutcomes AS
+        (
+            SELECT *
+            FROM Outcomes
+            WHERE @HistoryDays IS NULL OR StartedAt BETWEEN DATEADD(day, -@HistoryDays, @Now) AND @Now
+        )
+        """;
 
     private const string LatestOutcomesCte = """
         , RankedOutcomes AS
@@ -22,16 +23,41 @@ public sealed class JobRepository(IConfiguration configuration) : IJobRepository
                     PARTITION BY ServerName, SqlInstance, JobName
                     ORDER BY StartedAt DESC, EndedAt DESC,
                         CASE WHEN Status = N'Succeeded' THEN 1 ELSE 0 END, Status, Duration, Message)
-            FROM Outcomes AS outcomes
+            FROM PeriodOutcomes AS outcomes
         )
         """;
+
+    private const string InstanceClassification = """
+        CROSS APPLY (
+            SELECT InstanceHost = LEFT(job.SqlInstance, CHARINDEX(N'\', job.SqlInstance + N'\') - 1),
+                InstanceSuffix = CASE WHEN CHARINDEX(N'\', job.SqlInstance) > 0
+                    THEN SUBSTRING(job.SqlInstance, CHARINDEX(N'\', job.SqlInstance) + 1, 511)
+                    ELSE N'MSSQLSERVER' END
+        ) AS identityParts
+        OUTER APPLY (
+            SELECT TOP (1)
+                Environment = NULLIF(UPPER(TRIM(result.Environment)), N''),
+                ServerType = NULLIF(TRIM(result.ServerType), N'')
+            FROM [dbo].[ComplianceResults] AS result
+            WHERE UPPER(TRIM(result.SqlServer)) IN (job.ServerName, identityParts.InstanceHost)
+              AND COALESCE(NULLIF(UPPER(TRIM(result.SqlInstance)), N''), N'MSSQLSERVER')
+                  IN (job.SqlInstance, identityParts.InstanceSuffix)
+            ORDER BY result.EvaluatedAt DESC, result.Environment, result.ServerType
+        ) AS classification
+        """;
+
+    private const string UnclassifiedInstance = """
+        CROSS APPLY (SELECT Environment = CAST(NULL AS nvarchar(50)), ServerType = CAST(NULL AS nvarchar(50))) AS classification
+        """;
+
+    private const string DatabaseClock = "DECLARE @Now datetime = GETDATE();\n";
 
     private readonly string _connectionString = configuration.GetConnectionString("PortalDatabase")
         ?? throw new InvalidOperationException("ConnectionStrings:PortalDatabase is required in SqlServer mode.");
 
-    public async Task<IReadOnlyList<JobServerSummary>> GetServersAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<JobServerSummary>> GetServersAsync(int? historyDays, CancellationToken cancellationToken)
     {
-        var sql = JobOutcomesCte(HistorySource) + LatestOutcomesCte + """
+        var sql = DatabaseClock + JobOutcomesCte + HistoryWindowCte + LatestOutcomesCte + """
 
             SELECT ServerName,
                 TotalJobs = COUNT(CASE WHEN RunRank = 1 THEN 1 END),
@@ -44,17 +70,14 @@ public sealed class JobRepository(IConfiguration configuration) : IJobRepository
 
         await using var connection = new SqlConnection(_connectionString);
         return (await connection.QueryAsync<JobServerSummary>(
-            new CommandDefinition(sql, cancellationToken: cancellationToken))).AsList();
+            new CommandDefinition(sql, new { HistoryDays = historyDays }, cancellationToken: cancellationToken))).AsList();
     }
 
     public async Task<PagedResult<JobRun>> GetRunsAsync(JobQuery query, CancellationToken cancellationToken)
     {
-        var historySource = query.History && query.Status == JobQuery.NotSuccessful
-            ? UnsuccessfulHistorySource
-            : HistorySource;
-        var outcomes = JobOutcomesCte(historySource);
+        var outcomes = JobOutcomesCte + HistoryWindowCte;
         var ranking = query.History ? outcomes : outcomes + LatestOutcomesCte;
-        var source = query.History ? "Outcomes" : "RankedOutcomes";
+        var source = query.History ? "PeriodOutcomes" : "RankedOutcomes";
         var latestFilter = query.History ? "" : "RunRank = 1 AND ";
         var filtered = $"""
 
@@ -75,7 +98,7 @@ public sealed class JobRepository(IConfiguration configuration) : IJobRepository
 
             """;
         var cte = ranking + filtered;
-        var sql = cte + """
+        var sql = DatabaseClock + cte + """
             SELECT ServerName, SqlInstance, JobName, StartedAt, EndedAt, Duration, Status,
                 Message = CASE WHEN @IncludeMessage = 1 THEN Filtered.Message END
             FROM Filtered
@@ -94,6 +117,7 @@ public sealed class JobRepository(IConfiguration configuration) : IJobRepository
             query.JobName,
             query.Status,
             query.IncludeMessage,
+            query.HistoryDays,
             Offset = (query.Page - 1L) * query.PageSize,
             query.PageSize
         };
@@ -103,75 +127,54 @@ public sealed class JobRepository(IConfiguration configuration) : IJobRepository
         return new PagedResult<JobRun>(items, query.Page, query.PageSize, total);
     }
 
-    public async Task<IReadOnlyList<JobRuleViolation>> GetViolationsAsync(string? server, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<JobMonitoringResult>> GetMonitoringAsync(string? server, CancellationToken cancellationToken)
     {
-        // Rules are scoped per instance. Match the latest known classification
-        // from the same compliance source used in the configuration tab.
-        var sql = JobOutcomesCte(HistorySource) + """
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        // Reuse the portal's instance metadata when it is available.
+        var hasClassification = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+            """
+            SELECT CAST(CASE WHEN OBJECT_ID(N'dbo.ComplianceResults', N'U') IS NOT NULL
+                AND HAS_PERMS_BY_NAME(N'dbo.ComplianceResults', N'OBJECT', N'SELECT') = 1 THEN 1 ELSE 0 END AS bit);
+            """,
+            cancellationToken: cancellationToken));
+        var classification = hasClassification ? InstanceClassification : UnclassifiedInstance;
+        var sql = DatabaseClock + JobOutcomesCte + $"""
 
             , KnownJobs AS
             (
-                SELECT ServerName, SqlInstance, JobName,
-                    ActualRuns = COUNT(CASE WHEN StartedAt >= bounds.WindowStart AND StartedAt <= bounds.WindowEnd THEN 1 END),
-                    UnsuccessfulRuns = COUNT(CASE WHEN StartedAt >= bounds.WindowStart AND StartedAt <= bounds.WindowEnd
-                        AND Status <> N'Succeeded' THEN 1 END)
-                FROM (
-                    SELECT DISTINCT ServerName, SqlInstance, JobName, StartedAt, EndedAt, Status
-                    FROM Outcomes
-                    WHERE @Server IS NULL OR ServerName = UPPER(@Server)
-                ) AS runs
-                CROSS JOIN (SELECT WindowStart = DATEADD(hour, -24, GETDATE()), WindowEnd = GETDATE()) AS bounds
-                GROUP BY ServerName, SqlInstance, JobName
-            ),
-            Compared AS
-            (
-                SELECT job.ServerName, job.SqlInstance, job.JobName, classification.Environment, classification.ServerType,
-                    normalized.RunCountCheckType, monitoringRule.ExpectedRuns24h, job.ActualRuns, job.UnsuccessfulRuns,
-                    RunCountViolated = CAST(CASE
-                        WHEN normalized.RunCountCheckType = N'EXACT'
-                            AND (monitoringRule.ExpectedRuns24h IS NULL OR job.ActualRuns <> monitoringRule.ExpectedRuns24h) THEN 1
-                        WHEN normalized.RunCountCheckType = N'MINIMUM'
-                            AND (monitoringRule.ExpectedRuns24h IS NULL OR job.ActualRuns < monitoringRule.ExpectedRuns24h) THEN 1
-                        ELSE 0 END AS bit),
-                    SuccessViolated = CAST(CASE WHEN monitoringRule.CheckSuccess = 1 AND job.UnsuccessfulRuns > 0
-                        THEN 1 ELSE 0 END AS bit),
-                    monitoringRule.Description
-                FROM KnownJobs AS job
-                CROSS APPLY (
-                    SELECT InstanceHost = LEFT(job.SqlInstance, CHARINDEX(N'\', job.SqlInstance + N'\') - 1),
-                        InstanceSuffix = CASE WHEN CHARINDEX(N'\', job.SqlInstance) > 0
-                            THEN SUBSTRING(job.SqlInstance, CHARINDEX(N'\', job.SqlInstance) + 1, 511)
-                            ELSE N'MSSQLSERVER' END
-                ) AS identityParts
-                OUTER APPLY (
-                    SELECT TOP (1)
-                        Environment = NULLIF(UPPER(TRIM(result.Environment)), N''),
-                        ServerType = NULLIF(TRIM(result.ServerType), N'')
-                    FROM [dbo].[ComplianceResults] AS result
-                    WHERE UPPER(TRIM(result.SqlServer)) IN (job.ServerName, identityParts.InstanceHost)
-                      AND COALESCE(NULLIF(UPPER(TRIM(result.SqlInstance)), N''), N'MSSQLSERVER')
-                          IN (job.SqlInstance, identityParts.InstanceSuffix)
-                    ORDER BY result.EvaluatedAt DESC, result.Environment, result.ServerType
-                ) AS classification
-                INNER JOIN [dbo].[JobMonitoringRules] AS monitoringRule
-                    ON UPPER(TRIM(monitoringRule.JobName)) = UPPER(job.JobName)
-                   AND UPPER(TRIM(monitoringRule.Environment)) IN (N'ALL', classification.Environment)
-                   AND UPPER(TRIM(monitoringRule.ServerType)) IN (N'ALL', UPPER(classification.ServerType))
-                CROSS APPLY (SELECT RunCountCheckType = UPPER(TRIM(monitoringRule.RunCountCheckType))) AS normalized
+                SELECT DISTINCT ServerName, SqlInstance, JobName
+                FROM Outcomes
+                WHERE @Server IS NULL OR ServerName = UPPER(@Server)
             )
-            SELECT DISTINCT ServerName, SqlInstance, JobName, Environment, ServerType, RunCountCheckType, ExpectedRuns24h,
-                ActualRuns, UnsuccessfulRuns, RunCountViolated, SuccessViolated, Description
-            FROM Compared
-            WHERE RunCountViolated = 1 OR SuccessViolated = 1
-            ORDER BY ServerName, SqlInstance, JobName, RunCountCheckType, ExpectedRuns24h, Description;
+            SELECT job.ServerName, job.SqlInstance, job.JobName, classification.Environment, classification.ServerType,
+                RunCountCheckType = UPPER(TRIM(monitoringRule.RunCountCheckType)), monitoringRule.ExpectedRuns,
+                monitoringRule.MonitoringWindowHours, monitoringRule.CheckSuccess,
+                counts.ActualRuns, counts.SuccessfulRuns, counts.FailedRuns, monitoringRule.Description
+            FROM KnownJobs AS job
+            {classification}
+            INNER JOIN [dbo].[JobMonitoringRules] AS monitoringRule
+                ON UPPER(TRIM(monitoringRule.JobName)) = UPPER(job.JobName)
+               AND UPPER(TRIM(monitoringRule.Environment)) IN (N'ALL', classification.Environment)
+               AND UPPER(TRIM(monitoringRule.ServerType)) IN (N'ALL', UPPER(classification.ServerType))
+            CROSS APPLY (
+                SELECT ActualRuns = COUNT(*),
+                    SuccessfulRuns = COUNT(CASE WHEN jobRun.Status = N'Succeeded' THEN 1 END),
+                    FailedRuns = COUNT(CASE WHEN jobRun.Status = N'Failed' THEN 1 END)
+                FROM Outcomes AS jobRun
+                WHERE jobRun.ServerName = job.ServerName AND jobRun.SqlInstance = job.SqlInstance AND jobRun.JobName = job.JobName
+                  AND jobRun.StartedAt BETWEEN DATEADD(hour, -monitoringRule.MonitoringWindowHours, @Now) AND @Now
+            ) AS counts
+            ORDER BY job.ServerName, job.SqlInstance, job.JobName, monitoringRule.MonitoringWindowHours, RunCountCheckType,
+                monitoringRule.ExpectedRuns, monitoringRule.Description;
             """;
 
-        await using var connection = new SqlConnection(_connectionString);
-        return (await connection.QueryAsync<JobRuleViolation>(
+        return (await connection.QueryAsync<JobMonitoringResult>(
             new CommandDefinition(sql, new { Server = server }, cancellationToken: cancellationToken))).AsList();
     }
 
-    private static string JobOutcomesCte(string source) => $"""
+    private const string JobOutcomesCte = """
         ;WITH Outcomes AS
         (
             SELECT
@@ -193,7 +196,7 @@ public sealed class JobRepository(IConfiguration configuration) : IJobRepository
                     WHEN UPPER(TRIM(h.Status)) = N'SUCCEEDED' THEN N'Succeeded'
                     ELSE N'Failed' END,
                 h.Message
-            FROM ({source}) AS h
+            FROM [dbo].[JobRunHistory] AS h
             CROSS APPLY (SELECT
                 ComputerName = NULLIF(TRIM(h.ComputerName), N''),
                 SqlInstance = NULLIF(TRIM(h.SqlInstance), N''),

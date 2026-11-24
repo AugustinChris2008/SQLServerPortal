@@ -24,13 +24,13 @@ Die Readiness-Prüfung prüft Verbindung, Existenz und Leseberechtigung für die
 
 ## SQL-Agent-Jobs
 
-Der Tab „Jobs“ verwendet die vorhandene Verbindung zur Datenbank `SQLPortal`. Der Portal-Login benötigt zusätzlich `SELECT` auf `[dbo].[JobRunHistory]`, `[dbo].[JobMonitoringRules]` und `[dbo].[vw_FailedJobRuns]`. Für die Zuordnung von Umgebung und Servertyp verwendet das Portal die jüngste passende Zeile aus `[dbo].[ComplianceResults]`.
+Der Tab „Jobs“ verwendet die vorhandene Verbindung zur Datenbank `SQLPortal`. Für Jobdaten benötigt der Portal-Login `SELECT` auf `[dbo].[JobRunHistory]` und `[dbo].[JobMonitoringRules]`.
 
-- Die Jobübersicht liest Gesamtergebnisse mit `StepName = '(Job outcome)'` und den Abschlussstatus `Succeeded`, `Failed`, `Canceled` oder `Cancelled`. Je Kombination aus Server, SQL-Instanz und Job zählt der zuletzt gestartete abgeschlossene Lauf für die Serverquote. Gleichnamige Jobs auf unterschiedlichen Instanzen zählen einzeln. Zeitangaben entsprechen der gespeicherten SQL-Server-Ortszeit. Falls `StartDate` fehlt, verwendet das Portal `RunDate`.
-- Die Regelprüfung wertet `EXACT`, `MINIMUM` und `CheckSuccess` im rollierenden 24-Stunden-Fenster anhand der Datenbankzeit aus. `NONE` lässt die Laufanzahl offen. Eine Regel gilt für einen Job auf einer Instanz, für die er bereits in der importierten Historie bekannt ist. Dadurch sind auch null Läufe in den letzten 24 Stunden erkennbar. `ALL` gilt unabhängig von der Klassifikation. Für speziellere Regeln müssen die entsprechenden Felder der Instanz in den Compliance-Daten vorhanden sein.
-- Die vorhandene `vw_JobMonitoring` aggregiert mehrere Instanzen und Jobschritte. Deshalb liest das Portal die Regeln direkt und bewertet sie je Instanz. Die View bleibt in SQL Server verfügbar.
-- Die Serverliste lässt sich nach Jobstatus und Regelabweichungen filtern. Beim Öffnen eines Servers zeigt das Detailfenster Jobstatus, den letzten Lauf je Job und Regelabweichungen. Ein Klick auf den Job öffnet seine vollständige erfasste Historie je SQL-Instanz, absteigend nach Laufbeginn und mit der jeweiligen Agent-Meldung. Bei einer verletzten Regel mit positiver Soll-Laufanzahl und null erfassten Läufen erscheint „Kein Lauf in 24 Std.“ zusätzlich zum Ergebnis des letzten erfassten Laufs.
-- Das Dashboard zeigt bis zu fünf der jüngsten fehlgeschlagenen oder abgebrochenen Läufe. Fehlgeschlagene Läufe kommen aus `vw_FailedJobRuns`, abgebrochene Läufe aus `JobRunHistory`. „Alle anzeigen“ filtert die Serverliste auf Server mit nicht erfolgreichen Läufen in der Historie. Beim Öffnen eines Servers erscheint die gefilterte Historie.
+- Die Jobhistorie verwendet Gesamtergebnisse mit `StepName = '(Job outcome)'` und dem Abschlussstatus `Succeeded`, `Failed`, `Canceled` oder `Cancelled`. Zeitangaben entsprechen der gespeicherten SQL-Server-Ortszeit. Falls `StartDate` fehlt, verwendet das Portal `RunDate`.
+- Die API wertet jede passende Regel je SQL-Instanz anhand der Datenbankzeit und der Regelspalte `MonitoringWindowHours` aus. `EXACT` und `MINIMUM` vergleichen die Laufanzahl mit `ExpectedRuns`. `NONE` deaktiviert diese Prüfung. Eine aktivierte Erfolgsprüfung schlägt bei mindestens einem Lauf mit dem Status `Failed` fehl. Abgebrochene Läufe zählen zur Laufanzahl.
+- Die API erkennt fehlende Läufe auch dann, wenn der Job nur in älteren Einträgen der importierten Historie bekannt ist. Für Regeln mit konkreter Umgebung oder konkretem Servertyp nutzt sie die jüngste passende Instanzklassifizierung aus `[dbo].[ComplianceResults]`, sofern diese verfügbar ist. Regeln mit `ALL` für beide Felder gelten auch ohne Instanzklassifizierung.
+- Der Zeitraum im Jobs-Tab steuert die Serverstatistik und die angezeigte Historie. Im Serverfenster erscheint pro SQL-Instanz und Job eine Zeile. Ein Klick öffnet die Läufe dieses Jobs im gewählten Zeitraum mit der jeweiligen Agent-Meldung. Regelabweichungen bleiben bei historisch bekannten Jobs auch ohne Lauf im gewählten Historienzeitraum sichtbar.
+- Das Dashboard zeigt bis zu fünf der jüngsten fehlgeschlagenen oder abgebrochenen Läufe aus `JobRunHistory`. „Alle anzeigen“ öffnet den Jobs-Tab mit dem Serverfilter für nicht erfolgreiche Läufe in der Historie.
 
 ## Generischer View-Vertrag (derzeit nicht aktiv)
 
@@ -180,6 +180,8 @@ GRANT SELECT ON OBJECT::[dbo].[ComplianceRules] TO [SqlPortal];
 GRANT SELECT ON OBJECT::[dbo].[ComplianceResults] TO [SqlPortal];
 GRANT SELECT ON OBJECT::[dbo].[ComplianceCurrentValues] TO [SqlPortal];
 GRANT SELECT ON OBJECT::[dbo].[SQLServerSupportLifecycle] TO [SqlPortal];
+GRANT SELECT ON OBJECT::[dbo].[JobRunHistory] TO [SqlPortal];
+GRANT SELECT ON OBJECT::[dbo].[JobMonitoringRules] TO [SqlPortal];
 
 DENY INSERT, UPDATE, DELETE ON OBJECT::[dbo].[ComplianceRules] TO [SqlPortal];
 DENY INSERT, UPDATE, DELETE ON OBJECT::[dbo].[ComplianceResults] TO [SqlPortal];

@@ -2,20 +2,24 @@ import { useCallback, useRef, useState } from 'react';
 import { portalApi } from './api';
 import { formatDateTime, formatJobStatus, formatNumber, statusTone } from './format';
 import { useJobData, useModalDialog } from './hooks';
-import type { JobRun } from './types';
+import type { JobIdentity, JobRun } from './types';
 import { ErrorState, Icon, LoadingState, Pagination, StatusPill } from './ui';
 
 const historyPageSize = 20;
 
-export function JobHistoryDialog({ job, onClose }: { job: JobRun; onClose: () => void }) {
+export function JobHistoryDialog({ job, historyDays, onClose }: {
+  job: JobIdentity;
+  historyDays: number;
+  onClose: () => void;
+}) {
   const dialog = useModalDialog();
   const body = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
   const { serverName, sqlInstance, jobName } = job;
   const fetchHistory = useCallback((signal: AbortSignal) => portalApi.jobRuns({
-    server: serverName, sqlInstance, jobName, history: true, page, pageSize: historyPageSize,
-  }, signal), [serverName, sqlInstance, jobName, page]);
+    server: serverName, sqlInstance, jobName, history: true, historyDays, page, pageSize: historyPageSize,
+  }, signal), [serverName, sqlInstance, jobName, historyDays, page]);
   const history = useJobData(fetchHistory, revision);
 
   function changePage(nextPage: number) {
@@ -31,7 +35,7 @@ export function JobHistoryDialog({ job, onClose }: { job: JobRun; onClose: () =>
         <div>
           <span className="eyebrow">Jobhistorie</span>
           <h2 id="job-history-title">{jobName}</h2>
-          <p>{sqlInstance}</p>
+          <p>{sqlInstance} · {historyDays === 1 ? 'Letzte 24 Stunden' : `Letzte ${historyDays} Tage`}</p>
         </div>
         <button className="icon-button" type="button" aria-label="Jobhistorie schließen" onClick={onClose}><Icon name="close" size={19} /></button>
       </header>
@@ -52,7 +56,7 @@ export function JobHistoryDialog({ job, onClose }: { job: JobRun; onClose: () =>
               {history.data.totalPages > 1 && <Pagination page={history.data.page} totalPages={history.data.totalPages}
                 totalItems={history.data.totalItems} onChange={changePage} />}
             </section>
-          ) : <div className="jobs-empty" role="status">Für diesen Job sind keine Läufe erfasst.</div>}
+          ) : <div className="jobs-empty" role="status">Für diesen Job sind im gewählten Zeitraum keine Läufe erfasst.</div>}
       </div>
     </dialog>
   );

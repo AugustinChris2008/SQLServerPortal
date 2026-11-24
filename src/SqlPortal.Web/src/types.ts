@@ -275,10 +275,13 @@ export interface JobServerSummary {
   hasUnsuccessfulHistory: boolean;
 }
 
-export interface JobRun {
+export interface JobIdentity {
   serverName: string;
   sqlInstance: string;
   jobName: string;
+}
+
+export interface JobRun extends JobIdentity {
   startedAt: string | null;
   endedAt: string | null;
   duration: string | null;
@@ -286,18 +289,20 @@ export interface JobRun {
   message: string | null;
 }
 
-export interface JobRuleViolation {
-  serverName: string;
-  sqlInstance: string;
-  jobName: string;
+export interface JobMonitoringResult extends JobIdentity {
   environment: string | null;
   serverType: string | null;
   runCountCheckType: string;
-  expectedRuns24h: number | null;
+  expectedRuns: number | null;
+  monitoringWindowHours: number;
+  checkSuccess: boolean;
   actualRuns: number;
-  unsuccessfulRuns: number;
-  runCountViolated: boolean;
-  successViolated: boolean;
+  successfulRuns: number;
+  failedRuns: number;
+  runCountStatus: 'OK' | 'Failed' | 'NotChecked';
+  successStatus: 'OK' | 'Failed' | 'NotChecked';
+  overallStatus: 'OK' | 'Failed';
+  isMissingRun: boolean;
   description: string | null;
 }
 
@@ -309,6 +314,7 @@ export interface JobRunQuery {
   includeMessage?: boolean;
   status?: string;
   history?: boolean;
+  historyDays?: number;
   page?: number;
   pageSize?: number;
 }

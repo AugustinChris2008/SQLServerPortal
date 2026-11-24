@@ -1,72 +1,71 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { portalApi } from './api';
 import { formatDateTime, formatJobStatus, formatNumber } from './format';
-import { useDebouncedValue, useJobData, useModalDialog } from './hooks';
+import { useJobData, useModalDialog } from './hooks';
 import { JobHistoryDialog } from './JobHistoryDialog';
-import type { JobRuleViolation, JobRun, JobServerSummary } from './types';
+import type { JobIdentity, JobMonitoringResult, JobRun, JobServerSummary } from './types';
 import { ErrorState, Icon, LoadingState, Pagination, SearchInput, StatusPill } from './ui';
 
 const jobsPageSize = 20;
 
-export function JobServerDialog({ server, initialHistory, initialStatus, onClose }: {
+interface JobRow {
+  job: JobIdentity;
+  latestRun?: JobRun;
+  rules: JobMonitoringResult[];
+}
+
+export function JobServerDialog({ server, historyDays, initialStatus, onClose }: {
   server: JobServerSummary;
-  initialHistory: boolean;
+  historyDays: number;
   initialStatus: string;
   onClose: () => void;
 }) {
   const dialog = useModalDialog();
   const body = useRef<HTMLDivElement>(null);
-  const [history, setHistory] = useState(initialHistory);
-  const [selectedJob, setSelectedJob] = useState<JobRun | null>(null);
+  const [selectedJob, setSelectedJob] = useState<JobIdentity | null>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState(initialStatus);
   const [page, setPage] = useState(1);
   const [revision, setRevision] = useState(0);
-  const debouncedSearch = useDebouncedValue(search);
   const { serverName, successfulJobs, totalJobs } = server;
 
-  const fetchLatest = useCallback((signal: AbortSignal) => loadLatestRuns(serverName, signal), [serverName]);
-  const fetchViolations = useCallback((signal: AbortSignal) => portalApi.jobViolations(serverName, signal), [serverName]);
-  const fetchHistory = useCallback((signal: AbortSignal) => portalApi.jobRuns({
-    server: serverName, history: true, status, search: debouncedSearch, page, pageSize: jobsPageSize, includeMessage: false,
-  }, signal), [serverName, status, debouncedSearch, page]);
-  const latest = useJobData(history ? null : fetchLatest, revision);
-  const violations = useJobData(history ? null : fetchViolations, revision);
-  const pastRuns = useJobData(history ? fetchHistory : null, revision);
+  const fetchLatest = useCallback((signal: AbortSignal) => loadLatestRuns(serverName, historyDays, signal), [serverName, historyDays]);
+  const fetchMonitoring = useCallback((signal: AbortSignal) => portalApi.jobMonitoring(serverName, signal), [serverName]);
+  const latest = useJobData(fetchLatest, revision);
+  const monitoring = useJobData(fetchMonitoring, revision);
 
-  const violationsByJob = useMemo(() => {
-    const grouped = new Map<string, JobRuleViolation[]>();
-    for (const rule of violations.data ?? []) {
-      const key = jobKey(rule);
-      const rules = grouped.get(key);
-      if (rules) rules.push(rule);
-      else grouped.set(key, [rule]);
+  const jobs = useMemo(() => {
+    const grouped = new Map<string, JobRow>();
+    for (const run of latest.data ?? []) {
+      grouped.set(jobKey(run), { job: run, latestRun: run, rules: [] });
     }
-    return grouped;
-  }, [violations.data]);
+    for (const rule of monitoring.data ?? []) {
+      const key = jobKey(rule);
+      const row = grouped.get(key);
+      if (row) row.rules.push(rule);
+      else grouped.set(key, { job: rule, rules: [rule] });
+    }
+    return [...grouped.values()].filter((row) => row.latestRun || row.rules.some(hasViolation));
+  }, [latest.data, monitoring.data]);
 
-  const latestFiltered = useMemo(() => {
-    const normalized = search.trim().toLocaleLowerCase();
-    return (latest.data ?? []).filter((run) => {
-      if (!run.jobName.toLocaleLowerCase().includes(normalized) && !run.sqlInstance.toLocaleLowerCase().includes(normalized)) return false;
-      if (status === 'successful') return run.status === 'Succeeded';
-      if (status === 'not-successful') return run.status !== 'Succeeded';
-      if (status === 'rules') return violationsByJob.has(jobKey(run));
-      if (status === 'missing') return (violationsByJob.get(jobKey(run)) ?? []).some(isMissingRun);
-      return true;
-    });
-  }, [latest.data, search, status, violationsByJob]);
+  const normalized = search.trim().toLocaleLowerCase();
+  const filtered = jobs.filter(({ job, latestRun, rules }) => {
+    if (!job.jobName.toLocaleLowerCase().includes(normalized) && !job.sqlInstance.toLocaleLowerCase().includes(normalized)) return false;
+    if (status === 'successful') return latestRun?.status === 'Succeeded';
+    if (status === 'not-successful') return latestRun && latestRun.status !== 'Succeeded';
+    if (status === 'rules') return rules.some(hasViolation);
+    if (status === 'missing') return rules.some((rule) => rule.isMissingRun);
+    return true;
+  });
 
-  const totalItems = history ? pastRuns.data?.totalItems ?? 0 : latestFiltered.length;
-  const totalPages = history ? pastRuns.data?.totalPages ?? 1 : Math.max(1, Math.ceil(totalItems / jobsPageSize));
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / jobsPageSize));
   const currentPage = Math.min(page, totalPages);
   const offset = (currentPage - 1) * jobsPageSize;
-  const runs = history ? pastRuns.data?.items ?? [] : latestFiltered.slice(offset, offset + jobsPageSize);
   const rulesRequired = status === 'rules' || status === 'missing';
-  const loading = history ? pastRuns.loading : latest.loading || violations.loading;
-  const failed = history ? pastRuns.failed : latest.failed || (rulesRequired && violations.failed);
+  const loading = latest.loading || monitoring.loading;
+  const failed = latest.failed || (rulesRequired && monitoring.failed);
   const refresh = () => setRevision((value) => value + 1);
-  const ruleStatusText = status === 'rules' ? 'mit Regelabweichungen' : status === 'missing' ? 'ohne erwarteten Lauf' : '';
 
   return (
     <>
@@ -81,7 +80,9 @@ export function JobServerDialog({ server, initialHistory, initialStatus, onClose
           <div>
             <span className="eyebrow">SQL Server Agent</span>
             <h2 id="job-server-title">{serverName}</h2>
-            <p>{formatNumber(successfulJobs)} von {formatNumber(totalJobs)} {totalJobs === 1 ? 'Job' : 'Jobs'} erfolgreich beim letzten Lauf</p>
+            <p>{totalJobs > 0
+              ? `${formatNumber(successfulJobs)} von ${formatNumber(totalJobs)} ${totalJobs === 1 ? 'Job' : 'Jobs'} erfolgreich beim letzten Lauf im Zeitraum`
+              : 'Keine Läufe im gewählten Zeitraum'}</p>
           </div>
           <button className="icon-button" aria-label="Detailfenster schließen" onClick={onClose}><Icon name="close" size={19} /></button>
         </header>
@@ -94,38 +95,25 @@ export function JobServerDialog({ server, initialHistory, initialStatus, onClose
                 <option value="">Alle Status</option>
                 <option value="successful">Erfolgreich</option>
                 <option value="not-successful">Nicht erfolgreich</option>
-                {!history && <option value="missing">Kein erwarteter Lauf</option>}
-                {!history && <option value="rules">Regelabweichung</option>}
-              </select>
-            </label>
-            <label className="select-field">
-              <span id="jobs-dialog-history-label">Jobläufe</span>
-              <select aria-labelledby="jobs-dialog-history-label" value={history ? 'history' : 'latest'} onChange={(event) => {
-                setHistory(event.target.value === 'history');
-                if (rulesRequired) setStatus('');
-                setPage(1);
-              }}>
-                <option value="latest">Letzter Lauf je Job</option>
-                <option value="history">Alle Läufe</option>
+                <option value="missing">Kein erwarteter Lauf</option>
+                <option value="rules">Regelabweichung</option>
               </select>
             </label>
           </div>
 
-          {!history && violations.failed && !rulesRequired && (
+          {monitoring.failed && !rulesRequired && (
             <div className="jobs-rule-error" role="alert">
-              <span>Regelabweichungen konnten nicht geladen werden.</span>
+              <span>Der Monitoringstatus konnte nicht geladen werden.</span>
               <button className="text-button" onClick={refresh}>Erneut versuchen</button>
             </div>
           )}
           {loading ? <LoadingState label="Jobdetails werden geladen" /> :
             failed ? <ErrorState retry={refresh} /> :
-            runs.length > 0 ? (
+            totalItems > 0 ? (
               <>
                 <div className="jobs-detail-list">
-                  {runs.map((run, index) => (
-                    <JobResult key={`${jobKey(run)}-${run.startedAt}-${index}`} run={run}
-                      rules={history ? [] : violationsByJob.get(jobKey(run)) ?? []} history={history}
-                      onOpen={() => setSelectedJob(run)} />
+                  {filtered.slice(offset, offset + jobsPageSize).map((row) => (
+                    <JobResult key={jobKey(row.job)} row={row} onOpen={() => setSelectedJob(row.job)} />
                   ))}
                 </div>
                 {totalPages > 1 && <Pagination page={currentPage} totalPages={totalPages} totalItems={totalItems} onChange={(nextPage) => {
@@ -133,32 +121,28 @@ export function JobServerDialog({ server, initialHistory, initialStatus, onClose
                   body.current?.scrollTo({ top: 0 });
                 }} />}
               </>
-            ) : <div className="jobs-empty" role="status">{ruleStatusText ? `Keine passenden Jobs ${ruleStatusText}.` : 'Keine passenden Jobläufe gefunden.'}</div>}
+            ) : <div className="jobs-empty" role="status">Keine passenden Jobs gefunden.</div>}
         </div>
       </dialog>
-      {selectedJob && <JobHistoryDialog job={selectedJob} onClose={() => setSelectedJob(null)} />}
+      {selectedJob && <JobHistoryDialog job={selectedJob} historyDays={historyDays} onClose={() => setSelectedJob(null)} />}
     </>
   );
 }
 
-async function loadLatestRuns(server: string, signal: AbortSignal): Promise<JobRun[]> {
+async function loadLatestRuns(server: string, historyDays: number, signal: AbortSignal): Promise<JobRun[]> {
   const pageSize = 100;
-  const firstPage = await portalApi.jobRuns({ server, page: 1, pageSize, includeMessage: false }, signal);
+  const query = { server, historyDays, pageSize, includeMessage: false };
+  const firstPage = await portalApi.jobRuns({ ...query, page: 1 }, signal);
   const runs = firstPage.items;
   for (let page = 2; page <= firstPage.totalPages; page += 1) {
-    const next = await portalApi.jobRuns({ server, page, pageSize, includeMessage: false }, signal);
+    const next = await portalApi.jobRuns({ ...query, page }, signal);
     runs.push(...next.items);
   }
   return runs;
 }
 
-function JobResult({ run, rules, history, onOpen }: {
-  run: JobRun;
-  rules: JobRuleViolation[];
-  history: boolean;
-  onOpen: () => void;
-}) {
-  const missedRun = rules.some(isMissingRun);
+function JobResult({ row: { job, latestRun, rules }, onOpen }: { row: JobRow; onOpen: () => void }) {
+  const hasFailedRule = rules.some(hasViolation);
 
   return (
     <article className="jobs-detail-result">
@@ -166,25 +150,30 @@ function JobResult({ run, rules, history, onOpen }: {
         <div>
           <h3>
             <button className="jobs-job-link" type="button" aria-haspopup="dialog"
-              aria-label={`Jobhistorie für ${run.jobName} auf ${run.sqlInstance}`} onClick={onOpen}>
-              <span>{run.jobName}</span><Icon name="chevron-right" size={16} />
+              aria-label={`Jobhistorie für ${job.jobName} auf ${job.sqlInstance}`} onClick={onOpen}>
+              <span>{job.jobName}</span><Icon name="chevron-right" size={16} />
             </button>
           </h3>
-          <p>{run.sqlInstance} · {history ? 'Start' : 'Letzter Lauf'} {run.startedAt ? formatDateTime(run.startedAt) : 'unbekannt'}{run.duration && ` · ${run.duration}`}</p>
+          <p>{job.sqlInstance} · {latestRun
+            ? `Letzter Lauf ${latestRun.startedAt ? formatDateTime(latestRun.startedAt) : 'unbekannt'}${latestRun.duration ? ` · ${latestRun.duration}` : ''}`
+            : 'Kein Lauf im gewählten Historienzeitraum'}</p>
         </div>
         <div className="jobs-result-statuses">
-          <StatusPill status={formatJobStatus(run.status)} />
-          {rules.length > 0 && <StatusPill status="Regelabweichung" tone="danger" />}
-          {missedRun && <StatusPill status="Kein Lauf in 24 Std." tone="warning" />}
+          {latestRun && <StatusPill status={formatJobStatus(latestRun.status)} />}
+          {rules.length > 0 && <StatusPill status={hasFailedRule ? 'Regelabweichung' : 'Monitoring OK'} tone={hasFailedRule ? 'danger' : 'success'} />}
+          {rules.some((rule) => rule.isMissingRun) && <StatusPill status="Kein erwarteter Lauf" tone="warning" />}
         </div>
       </header>
 
       {rules.length > 0 && (
-        <ul className="jobs-result-rules" aria-label="Regelabweichungen der letzten 24 Stunden">
+        <ul className="jobs-result-rules" aria-label="Monitoringregeln">
           {rules.map((rule, index) => (
-            <li key={index}>
-              {rule.runCountViolated && <strong>{formatNumber(rule.actualRuns)} Läufe in 24 Std. · {expectedRuns(rule)}</strong>}
-              {rule.successViolated && <strong>{formatNumber(rule.unsuccessfulRuns)} nicht erfolgreich in 24 Std.</strong>}
+            <li key={index} className={hasViolation(rule) ? 'jobs-rule--failed' : undefined}>
+              <strong>{formatNumber(rule.monitoringWindowHours)} Std. · {formatNumber(rule.actualRuns)} {rule.actualRuns === 1 ? 'Lauf' : 'Läufe'} · {formatNumber(rule.successfulRuns)} erfolgreich · {formatNumber(rule.failedRuns)} fehlgeschlagen</strong>
+              <p>{[
+                rule.runCountStatus !== 'NotChecked' && `Laufanzahl ${rule.runCountStatus === 'OK' ? 'OK' : 'abweichend'} (${expectedRuns(rule)})`,
+                rule.successStatus !== 'NotChecked' && `Erfolgsprüfung ${rule.successStatus === 'OK' ? 'OK' : 'fehlgeschlagen'}`,
+              ].filter(Boolean).join(' · ')}</p>
               <p>{[rule.environment, rule.serverType, rule.description].filter(Boolean).join(' · ')}</p>
             </li>
           ))}
@@ -194,15 +183,15 @@ function JobResult({ run, rules, history, onOpen }: {
   );
 }
 
-function expectedRuns({ expectedRuns24h, runCountCheckType }: JobRuleViolation): string {
-  if (expectedRuns24h === null) return 'Sollwert fehlt';
-  return `Soll ${runCountCheckType === 'MINIMUM' ? 'mindestens' : 'genau'} ${formatNumber(expectedRuns24h)}`;
+function expectedRuns({ expectedRuns, runCountCheckType }: JobMonitoringResult): string {
+  if (expectedRuns === null) return 'Sollwert fehlt';
+  return `Soll ${runCountCheckType === 'MINIMUM' ? 'mindestens' : 'genau'} ${formatNumber(expectedRuns)}`;
 }
 
-function isMissingRun(rule: JobRuleViolation): boolean {
-  return rule.runCountViolated && rule.actualRuns === 0 && (rule.expectedRuns24h ?? 0) > 0;
+function hasViolation(rule: JobMonitoringResult): boolean {
+  return rule.overallStatus === 'Failed';
 }
 
-function jobKey(job: Pick<JobRun, 'sqlInstance' | 'jobName'>): string {
-  return JSON.stringify([job.sqlInstance, job.jobName]);
+function jobKey(job: JobIdentity): string {
+  return JSON.stringify([job.sqlInstance, job.jobName.toLowerCase()]);
 }

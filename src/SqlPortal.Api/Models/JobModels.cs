@@ -16,19 +16,36 @@ public sealed record JobServerSummary(
     int SuccessfulJobs,
     bool HasUnsuccessfulHistory);
 
-public sealed record JobRuleViolation(
+public sealed record JobMonitoringResult(
     string ServerName,
     string SqlInstance,
     string JobName,
     string? Environment,
     string? ServerType,
     string RunCountCheckType,
-    int? ExpectedRuns24h,
+    int? ExpectedRuns,
+    int MonitoringWindowHours,
+    bool CheckSuccess,
     int ActualRuns,
-    int UnsuccessfulRuns,
-    bool RunCountViolated,
-    bool SuccessViolated,
-    string? Description);
+    int SuccessfulRuns,
+    int FailedRuns,
+    string? Description)
+{
+    private const string Ok = "OK";
+    private const string Failed = "Failed";
+    private const string NotChecked = "NotChecked";
+
+    public string RunCountStatus => RunCountCheckType switch
+    {
+        "EXACT" => ActualRuns == ExpectedRuns ? Ok : Failed,
+        "MINIMUM" => ExpectedRuns is int expected && ActualRuns >= expected ? Ok : Failed,
+        _ => NotChecked
+    };
+
+    public string SuccessStatus => !CheckSuccess ? NotChecked : FailedRuns > 0 ? Failed : Ok;
+    public string OverallStatus => RunCountStatus == Failed || SuccessStatus == Failed ? Failed : Ok;
+    public bool IsMissingRun => RunCountStatus == Failed && ActualRuns == 0 && ExpectedRuns > 0;
+}
 
 public sealed record JobQuery(
     string? Search,
@@ -39,7 +56,8 @@ public sealed record JobQuery(
     int PageSize,
     string? SqlInstance,
     string? JobName,
-    bool IncludeMessage)
+    bool IncludeMessage,
+    int? HistoryDays)
 {
     public const string Successful = "successful";
     public const string NotSuccessful = "not-successful";
@@ -53,7 +71,8 @@ public sealed record JobQuery(
         int pageSize,
         string? sqlInstance = null,
         string? jobName = null,
-        bool includeMessage = true) =>
+        bool includeMessage = true,
+        int? historyDays = null) =>
         new(
             Normalize(search),
             Normalize(server),
@@ -63,7 +82,10 @@ public sealed record JobQuery(
             Math.Clamp(pageSize, 1, 100),
             Normalize(sqlInstance),
             Normalize(jobName),
-            includeMessage);
+            includeMessage,
+            historyDays);
+
+    public static bool IsValidHistoryDays(int? historyDays) => historyDays is null or (>= 1 and <= 90);
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

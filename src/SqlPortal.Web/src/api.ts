@@ -3,7 +3,7 @@ import type {
   ConfigurationCheck,
   ConfigurationOverview,
   DatabaseDetail,
-  JobRuleViolation,
+  JobMonitoringResult,
   JobRun,
   JobRunQuery,
   JobServerSummary,
@@ -44,12 +44,14 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 export const portalApi = {
-  jobServers: (signal?: AbortSignal) =>
-    getJson<JobServerSummary[]>('/api/v1/jobs/servers', signal),
+  jobServers: (historyDays: number, signal?: AbortSignal) =>
+    getJson<JobServerSummary[]>(`/api/v1/jobs/servers${toQueryString({ historyDays })}`, signal),
   jobRuns: (query: JobRunQuery, signal?: AbortSignal) =>
     getJson<PagedResult<JobRun>>(`/api/v1/jobs/runs${toQueryString(query)}`, signal),
+  jobMonitoring: (server: string, signal?: AbortSignal) =>
+    getJson<JobMonitoringResult[]>(`/api/v1/jobs/monitoring${toQueryString({ server })}`, signal),
   jobViolations: (server?: string, signal?: AbortSignal) =>
-    getJson<JobRuleViolation[]>(`/api/v1/jobs/violations${toQueryString({ server })}`, signal),
+    getJson<JobMonitoringResult[]>(`/api/v1/jobs/violations${toQueryString({ server })}`, signal),
   overview: (signal?: AbortSignal) =>
     getJson<PortalOverview>('/api/v1/overview', signal),
   analyticsOverview: (signal?: AbortSignal) =>

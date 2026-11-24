@@ -61,23 +61,30 @@ public static class PortalApi
         var jobs = api.MapGroup("/jobs");
         jobs.MapGet("/servers", GetJobServers)
             .WithName("GetJobServers")
-            .WithSummary("Returns the latest completed job outcome counts per server.");
+            .WithSummary("Returns the latest completed job outcome counts per server in the requested history period.");
 
         jobs.MapGet("/runs", GetJobRuns)
             .WithName("GetJobRuns")
-            .WithSummary("Returns filtered job outcomes, optionally including previous runs.");
+            .WithSummary("Returns filtered job outcomes, optionally including previous runs in the requested history period.");
+
+        jobs.MapGet("/monitoring", GetJobMonitoring)
+            .WithName("GetJobMonitoring")
+            .WithSummary("Returns rule evaluations based on each rule's monitoring window.");
 
         jobs.MapGet("/violations", GetJobViolations)
             .WithName("GetJobViolations")
-            .WithSummary("Returns job monitoring rule violations for the last 24 hours.");
+            .WithSummary("Returns failed rule evaluations based on each rule's monitoring window.");
 
         return app;
     }
 
     private static async Task<IResult> GetJobServers(
+        int? historyDays,
         IJobRepository repository,
         CancellationToken cancellationToken) =>
-        Results.Ok(await repository.GetServersAsync(cancellationToken));
+        JobQuery.IsValidHistoryDays(historyDays)
+            ? Results.Ok(await repository.GetServersAsync(historyDays, cancellationToken))
+            : InvalidJobHistoryDays();
 
     private static async Task<IResult> GetJobRuns(
         string? search,
@@ -89,20 +96,36 @@ public static class PortalApi
         string? sqlInstance,
         string? jobName,
         bool? includeMessage,
+        int? historyDays,
         IJobRepository repository,
         CancellationToken cancellationToken) =>
-        Results.Ok(await repository.GetRunsAsync(
-            JobQuery.Create(search, server, status, history ?? false, page ?? 1, pageSize ?? 20,
-                sqlInstance, jobName, includeMessage ?? true),
+        JobQuery.IsValidHistoryDays(historyDays)
+            ? Results.Ok(await repository.GetRunsAsync(
+                JobQuery.Create(search, server, status, history ?? false, page ?? 1, pageSize ?? 20,
+                    sqlInstance, jobName, includeMessage ?? true, historyDays),
+                cancellationToken))
+            : InvalidJobHistoryDays();
+
+    private static IResult InvalidJobHistoryDays() => Results.ValidationProblem(new Dictionary<string, string[]>
+    {
+        ["historyDays"] = ["The history period must be between 1 and 90 days."]
+    });
+
+    private static async Task<IResult> GetJobMonitoring(
+        string? server,
+        IJobRepository repository,
+        CancellationToken cancellationToken) =>
+        Results.Ok(await repository.GetMonitoringAsync(
+            string.IsNullOrWhiteSpace(server) ? null : server.Trim(),
             cancellationToken));
 
     private static async Task<IResult> GetJobViolations(
         string? server,
         IJobRepository repository,
         CancellationToken cancellationToken) =>
-        Results.Ok(await repository.GetViolationsAsync(
+        Results.Ok((await repository.GetMonitoringAsync(
             string.IsNullOrWhiteSpace(server) ? null : server.Trim(),
-            cancellationToken));
+            cancellationToken)).Where(result => result.OverallStatus == "Failed"));
 
     private static async Task<IResult> GetOverview(
         IPortalRepository repository,

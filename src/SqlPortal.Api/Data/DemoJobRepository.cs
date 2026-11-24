@@ -4,9 +4,10 @@ namespace SqlPortal.Api.Data;
 
 public sealed class DemoJobRepository(TimeProvider timeProvider) : IJobRepository
 {
-    public Task<IReadOnlyList<JobServerSummary>> GetServersAsync(CancellationToken cancellationToken)
+    public Task<IReadOnlyList<JobServerSummary>> GetServersAsync(int? historyDays, CancellationToken cancellationToken)
     {
-        IReadOnlyList<JobServerSummary> items = CreateRuns()
+        var now = timeProvider.GetLocalNow().DateTime;
+        IReadOnlyList<JobServerSummary> items = FilterByHistoryDays(CreateRuns(now), now, historyDays)
             .GroupBy(run => run.ServerName, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
@@ -21,7 +22,8 @@ public sealed class DemoJobRepository(TimeProvider timeProvider) : IJobRepositor
 
     public Task<PagedResult<JobRun>> GetRunsAsync(JobQuery query, CancellationToken cancellationToken)
     {
-        var runs = CreateRuns();
+        var now = timeProvider.GetLocalNow().DateTime;
+        var runs = FilterByHistoryDays(CreateRuns(now), now, query.HistoryDays);
         var selected = query.History ? runs : LatestRuns(runs);
         var filtered = selected.Where(run =>
                 (query.Server is null || run.ServerName.Equals(query.Server, StringComparison.OrdinalIgnoreCase))
@@ -43,25 +45,44 @@ public sealed class DemoJobRepository(TimeProvider timeProvider) : IJobRepositor
         return Task.FromResult(new PagedResult<JobRun>(items, query.Page, query.PageSize, filtered.Length));
     }
 
-    public Task<IReadOnlyList<JobRuleViolation>> GetViolationsAsync(string? server, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<JobMonitoringResult>> GetMonitoringAsync(string? server, CancellationToken cancellationToken)
     {
-        IReadOnlyList<JobRuleViolation> violations =
+        JobMonitoringResult[] rules =
         [
             new("DEZANT101V", @"DEZANT101V\KATHI", "DatabaseBackup - USER_DATABASES - LOG", "PROD", "Cluster",
-                "MINIMUM", 24, 2, 0, true, false, "Für die Transaktionsprotokolle ist mindestens ein Lauf pro Stunde vorgesehen."),
+                "MINIMUM", 24, 24, true, 0, 0, 0, "Für die Transaktionsprotokolle ist mindestens ein Lauf pro Stunde vorgesehen."),
             new("DEZANT101V", @"DEZANT101V\KATHI", "TEST_FailedJob", "PROD", "Cluster",
-                "NONE", null, 1, 1, false, true, "Jeder ausgeführte Lauf muss erfolgreich abgeschlossen werden."),
+                "NONE", null, 24, true, 0, 0, 0, "Fehlgeschlagene Testläufe werden gemeldet."),
             new("DEZSQL204V", "DEZSQL204V", "DatabaseIntegrityCheck", "CONS", "Standalone",
-                "EXACT", 1, 0, 0, true, false, "Die Integritätsprüfung soll täglich laufen.")
+                "EXACT", 1, 24, false, 0, 0, 0, "Die Integritätsprüfung soll täglich laufen."),
+            new("DEZSQL204V", "DEZSQL204V", "WeeklyCleanup", "CONS", "Standalone",
+                "MINIMUM", 1, 168, true, 0, 0, 0, "Die Bereinigung soll mindestens einmal pro Woche laufen."),
+            new("DEZSQL204V", "DEZSQL204V", "ExportReporting", "CONS", "Standalone",
+                "NONE", null, 24, true, 0, 0, 0, null)
         ];
-        return Task.FromResult<IReadOnlyList<JobRuleViolation>>(server is null
-            ? violations
-            : violations.Where(item => item.ServerName.Equals(server, StringComparison.OrdinalIgnoreCase)).ToArray());
+        var now = timeProvider.GetLocalNow().DateTime;
+        var runs = CreateRuns(now).ToLookup(run => (run.ServerName, run.SqlInstance, run.JobName));
+        IReadOnlyList<JobMonitoringResult> results = rules
+            .Where(rule => server is null || rule.ServerName.Equals(server, StringComparison.OrdinalIgnoreCase))
+            .Select(rule =>
+            {
+                var windowStart = now.AddHours(-rule.MonitoringWindowHours);
+                var windowRuns = runs[(rule.ServerName, rule.SqlInstance, rule.JobName)]
+                    .Where(run => run.StartedAt >= windowStart && run.StartedAt <= now)
+                    .ToArray();
+                return rule with
+                {
+                    ActualRuns = windowRuns.Length,
+                    SuccessfulRuns = windowRuns.Count(IsSuccessful),
+                    FailedRuns = windowRuns.Count(run => run.Status == "Failed")
+                };
+            })
+            .ToArray();
+        return Task.FromResult(results);
     }
 
-    private IEnumerable<JobRun> CreateRuns()
+    private static IEnumerable<JobRun> CreateRuns(DateTime now)
     {
-        var now = timeProvider.GetLocalNow().DateTime;
         return
         [
             Run("DEZANT101V", @"DEZANT101V\KATHI", "DatabaseBackup - USER_DATABASES - LOG", 15),
@@ -75,7 +96,9 @@ public sealed class DemoJobRepository(TimeProvider timeProvider) : IJobRepositor
             Run("DEZANT101V", @"DEZANT101V\KATHI", "CleanupHistory", 180),
             Run("DEZSQL207V", "DEZSQL207V", "DatabaseBackup - USER_DATABASES - FULL", 230),
             Run("DEZANT101V", @"DEZANT101V\KATHI", "IndexOptimize", 320, "Failed", "Ein früherer Lauf konnte die Datenbank nicht sperren."),
-            Run("DEZSQL204V", "DEZSQL204V", "DatabaseIntegrityCheck", 1600)
+            Run("DEZSQL204V", "DEZSQL204V", "DatabaseIntegrityCheck", 1600),
+            Run("DEZSQL204V", "DEZSQL204V", "WeeklyCleanup", 4 * 1440),
+            Run("DEZSQL204V", "DEZSQL204V", "WeeklyCleanup", 10 * 1440, "Failed", "Die Bereinigung ist fehlgeschlagen.")
         ];
 
         JobRun Run(string server, string instance, string job, int minutesAgo, string status = "Succeeded", string? message = null)
@@ -85,6 +108,11 @@ public sealed class DemoJobRepository(TimeProvider timeProvider) : IJobRepositor
                 message ?? "Der Job wurde erfolgreich abgeschlossen.");
         }
     }
+
+    private static IEnumerable<JobRun> FilterByHistoryDays(IEnumerable<JobRun> runs, DateTime now, int? historyDays) =>
+        historyDays is int days
+            ? runs.Where(run => run.StartedAt >= now.AddDays(-days) && run.StartedAt <= now)
+            : runs;
 
     private static IEnumerable<JobRun> LatestRuns(IEnumerable<JobRun> runs) =>
         runs.OrderByDescending(run => run.StartedAt)
